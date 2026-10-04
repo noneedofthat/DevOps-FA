@@ -1,31 +1,23 @@
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
+# Configure the AWS Provider for the Mumbai region
 provider "aws" {
-  region = "us-east-1"
+  region = "ap-south-1"
 }
 
-resource "aws_vpc" "hackathon_vpc" {
-  cidr_block = "10.0.0.0/16"
-  enable_dns_hostnames = true
-}
+# Create a security group to allow SSH, HTTP, and Backend API traffic
+resource "aws_security_group" "hackathon_sg" {
+  name        = "hackathon_sg"
+  description = "Allow inbound traffic for SSH, HTTP, and API"
 
-resource "aws_security_group" "web_sg" {
-  name        = "web_sg"
-  description = "Allow inbound HTTP and HTTPS"
-  vpc_id      = aws_vpc.hackathon_vpc.id
-
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
+  # SSH access from anywhere
   ingress {
     from_port   = 22
     to_port     = 22
@@ -33,20 +25,59 @@ resource "aws_security_group" "web_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # HTTP access for potential frontend testing
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Backend API access
+  ingress {
+    from_port   = 5000
+    to_port     = 5000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Allow all outbound traffic (needed for apt-get and docker pulls)
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
-}
-
-resource "aws_instance" "app_server" {
-  ami           = "ami-0c55b159cbfafe1f0" # Ubuntu 20.04 LTS
-  instance_type = "t2.micro"
-  vpc_security_group_ids = [aws_security_group.web_sg.id]
 
   tags = {
-    Name = "Hackathon-Backend-Server"
+    Name = "hackathon-security-group"
   }
+}
+
+# Provision the EC2 Instance
+resource "aws_instance" "hackathon_server" {
+  # Ubuntu Server 26.04 LTS (HVM), SSD Volume Type in ap-south-1
+  ami           = "ami-01a00762f46d584a1" 
+  instance_type = "t3.micro"
+  
+  # Ensure you have generated this key pair in AWS before applying
+  key_name      = "fal-key"
+
+  vpc_security_group_ids = [aws_security_group.hackathon_sg.id]
+
+  # Allocate an 8GB root volume
+  root_block_device {
+    volume_size = 8
+    volume_type = "gp3"
+  }
+
+  tags = {
+    Name = "TenzorX-Hackathon-Backend"
+  }
+}
+
+# Output the public IP after creation so you can update inventory.ini
+output "instance_public_ip" {
+  description = "Public IP address of the EC2 instance"
+  value       = aws_instance.hackathon_server.public_ip
 }

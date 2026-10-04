@@ -18,9 +18,18 @@ node_modules/
 dist/
 backend/dist/
 
+# terraform infrastructure state and local configurations
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/.terraform.lock.hcl
+
+# ansible local inventory and private keys
+ansible/inventory.ini
+*.pem
+
 # misc
 .DS_Store
-*.pem
 codebase_output*.txt
 
 # debug
