@@ -492,18 +492,18 @@ export default function ProjectSubmissionPage() {
 
         </div>
 
-        {/* Action Bottom Bar */}
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+        {/* Action Bottom Bar: Centered in the middle */}
+        <div className="flex items-center justify-center gap-4 pt-6 border-t border-slate-200">
           <button
             type="button"
-            className="px-6 py-2.5 border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold rounded-xl text-xs transition cursor-pointer"
+            className="px-8 py-3 border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold rounded-xl text-sm transition cursor-pointer shadow-sm"
           >
             Save draft
           </button>
           <button
             type="submit"
             disabled={isSubmitting}
-            className="px-7 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition shadow-sm hover:shadow cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+            className="px-10 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition shadow-sm hover:shadow cursor-pointer disabled:opacity-50 flex items-center gap-2"
           >
             {isSubmitting ? 'Submitting...' : 'Submit project'}
           </button>

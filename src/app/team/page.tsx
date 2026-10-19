@@ -28,6 +28,7 @@ export default function TeamFormationPage() {
   
   const [hasTeam, setHasTeam] = useState(false);
   const [teamData, setTeamData] = useState<any>(null);
+  const [submissionData, setSubmissionData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   
   // Modals state
@@ -45,7 +46,7 @@ export default function TeamFormationPage() {
     }
 
     const qTeam = query(collection(db, "teams"), where("members", "array-contains", user.uid));
-    const unsubscribe = onSnapshot(qTeam, (snapshot) => {
+    const unsubTeam = onSnapshot(qTeam, (snapshot) => {
       if (!snapshot.empty) {
         setHasTeam(true);
         const data: any = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
@@ -57,7 +58,19 @@ export default function TeamFormationPage() {
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    const qSub = query(collection(db, "submissions"), where("submittedByUid", "==", user.uid));
+    const unsubSub = onSnapshot(qSub, (snapshot) => {
+      if (!snapshot.empty) {
+        setSubmissionData(snapshot.docs[0].data());
+      } else {
+        setSubmissionData(null);
+      }
+    });
+
+    return () => {
+      unsubTeam();
+      unsubSub();
+    };
   }, [user]);
 
   // Handle Team Creation from Modal
@@ -327,7 +340,13 @@ export default function TeamFormationPage() {
     }
   ];
 
-  const progress = teamData?.progressPercentage || 0;
+  // Dynamically calculate milestones from real submission and team state
+  const hasProblemStatement = Boolean(hasTeam);
+  const hasRepo = Boolean(submissionData?.githubUrl || submissionData?.repoUrl);
+  const isSubmitted = Boolean(submissionData?.status === 'Submitted' || submissionData?.assetUrl);
+
+  const completedCount = (hasProblemStatement ? 1 : 0) + (hasRepo ? 1 : 0) + (isSubmitted ? 1 : 0);
+  const progress = Math.round((completedCount / 3) * 100);
 
   return (
     <div className="w-full space-y-8 animate-in fade-in duration-300">
@@ -466,45 +485,65 @@ export default function TeamFormationPage() {
           </div>
 
           <div className="space-y-4 text-xs">
-            {/* Milestone 1 */}
+            {/* Milestone 1: Team Formed */}
             <div className="flex items-start justify-between gap-3 p-3 rounded-xl bg-slate-50/70 border border-slate-100">
               <div className="flex items-start gap-2.5">
-                <CheckCircle2 size={18} className="text-emerald-500 mt-0.5 flex-shrink-0" />
+                {hasProblemStatement ? (
+                  <CheckCircle2 size={18} className="text-emerald-500 mt-0.5 flex-shrink-0" />
+                ) : (
+                  <Circle size={18} className="text-slate-300 mt-0.5 flex-shrink-0" />
+                )}
                 <div>
-                  <div className="font-bold text-slate-900">Choose problem statement</div>
-                  <div className="text-[11px] text-slate-400 mt-0.5">10 Oct, 2026</div>
+                  <div className="font-bold text-slate-900">Form team and choose event</div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">Campus Innovation Sprint 2026</div>
                 </div>
               </div>
-              <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded">
-                Completed
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                hasProblemStatement ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500'
+              }`}>
+                {hasProblemStatement ? 'Completed' : 'Pending'}
               </span>
             </div>
 
-            {/* Milestone 2 */}
+            {/* Milestone 2: Repository Link */}
             <div className="flex items-start justify-between gap-3 p-3 rounded-xl bg-slate-50/70 border border-slate-100">
               <div className="flex items-start gap-2.5">
-                <CheckCircle2 size={18} className="text-emerald-500 mt-0.5 flex-shrink-0" />
+                {hasRepo ? (
+                  <CheckCircle2 size={18} className="text-emerald-500 mt-0.5 flex-shrink-0" />
+                ) : (
+                  <Circle size={18} className="text-slate-300 mt-0.5 flex-shrink-0" />
+                )}
                 <div>
-                  <div className="font-bold text-slate-900">Add repository link</div>
-                  <div className="text-[11px] text-slate-400 mt-0.5">12 Oct, 2026</div>
+                  <div className="font-bold text-slate-900">Add repository link and details</div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    {hasRepo ? (submissionData?.githubUrl || 'Repository linked') : 'Add your GitHub repo in Submit'}
+                  </div>
                 </div>
               </div>
-              <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded">
-                Completed
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                hasRepo ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500'
+              }`}>
+                {hasRepo ? 'Completed' : 'Pending'}
               </span>
             </div>
 
-            {/* Milestone 3 */}
+            {/* Milestone 3: Final Project Submission */}
             <div className="flex items-start justify-between gap-3 p-3 rounded-xl bg-slate-50/70 border border-slate-100">
               <div className="flex items-start gap-2.5">
-                <Circle size={18} className="text-slate-300 mt-0.5 flex-shrink-0" />
+                {isSubmitted ? (
+                  <CheckCircle2 size={18} className="text-emerald-500 mt-0.5 flex-shrink-0" />
+                ) : (
+                  <Circle size={18} className="text-slate-300 mt-0.5 flex-shrink-0" />
+                )}
                 <div>
                   <div className="font-bold text-slate-900">Submit final project</div>
                   <div className="text-[11px] text-slate-400 mt-0.5">18 Oct, 2026</div>
                 </div>
               </div>
-              <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-0.5 rounded">
-                Pending
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                isSubmitted ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500'
+              }`}>
+                {isSubmitted ? 'Completed' : 'Pending'}
               </span>
             </div>
           </div>

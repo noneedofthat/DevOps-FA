@@ -14,6 +14,7 @@ export default function Navigation() {
   const { user, isAdmin, logout } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
   // If on full-page auth screens, hide standard sidebar
   if (pathname === "/admin/login" || pathname === "/login") {
@@ -128,20 +129,82 @@ export default function Navigation() {
           </div>
 
           {/* Notification Bell */}
-          <button 
-            type="button"
-            className="relative p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition cursor-pointer"
-            aria-label="Notifications"
-          >
-            <Bell size={18} />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500 ring-2 ring-white"></span>
-          </button>
+          <div className="relative">
+            <button 
+              type="button"
+              onClick={() => {
+                setIsNotificationsOpen(!isNotificationsOpen);
+                if (isProfileOpen) setIsProfileOpen(false);
+              }}
+              className="relative p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+              aria-label="Notifications"
+            >
+              <Bell size={18} />
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500 ring-2 ring-white"></span>
+            </button>
+
+            {/* Notifications Popover */}
+            {isNotificationsOpen && (
+              <div className="absolute right-0 top-11 w-80 sm:w-96 bg-white border border-slate-200 rounded-2xl shadow-2xl p-4 text-xs space-y-3 z-50 animate-in fade-in zoom-in-95 duration-150">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-900 text-sm">Notifications</span>
+                    <span className="bg-blue-50 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-blue-200">
+                      3 New
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsNotificationsOpen(false)}
+                    className="text-[11px] text-slate-400 hover:text-slate-600 font-medium cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
+
+                <div className="space-y-2 max-h-72 overflow-y-auto">
+                  <div className="p-2.5 rounded-xl bg-blue-50/60 border border-blue-100/80 space-y-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-bold text-blue-900">Sprint 2026 Live</span>
+                      <span className="text-[10px] text-blue-500">Just now</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      Campus Innovation Sprint 2026 is officially active. Form your team and prepare submissions.
+                    </p>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-bold text-slate-900">Submission Deadline</span>
+                      <span className="text-[10px] text-slate-400">18 Oct, 11:59 PM</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      Final project submission with repository URL and presentation PDF closes on 18 Oct 2026.
+                    </p>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-bold text-slate-900">Team Workspace Ready</span>
+                      <span className="text-[10px] text-slate-400">Active</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      Invite teammates using your unique 6-character team invite code in the Team workspace.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* User Profile Avatar */}
           <div className="relative">
             <button
               type="button"
-              onClick={() => setIsProfileOpen(!isProfileOpen)}
+              onClick={() => {
+                setIsProfileOpen(!isProfileOpen);
+                if (isNotificationsOpen) setIsNotificationsOpen(false);
+              }}
               className="flex items-center gap-2 p-1 rounded-xl hover:bg-slate-100 transition cursor-pointer"
             >
               <div className="w-8 h-8 rounded-full bg-slate-900 text-white font-black text-xs flex items-center justify-center shadow-sm">
@@ -170,13 +233,16 @@ export default function Navigation() {
                   My Team Workspace
                 </Link>
 
-                <Link
-                  href="/admin/login"
-                  onClick={() => setIsProfileOpen(false)}
-                  className="block px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-50 font-medium"
-                >
-                  Admin MFA Portal
-                </Link>
+                {/* RBAC: Only visible to authenticated administrators */}
+                {isAdmin && (
+                  <Link
+                    href="/admin/submissions"
+                    onClick={() => setIsProfileOpen(false)}
+                    className="block px-3 py-2 rounded-xl text-blue-700 hover:bg-blue-50 font-semibold"
+                  >
+                    Admin Dashboard
+                  </Link>
+                )}
 
                 <div className="border-t border-slate-100 my-1"></div>
 

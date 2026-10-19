@@ -12,6 +12,8 @@ import { fetchActiveEvents, EventItem, DEFAULT_EVENTS } from '@/lib/api';
 export default function EventsDiscoveryPage() {
   const { user, isAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState<'All events' | 'Hackathons' | 'Workshops'>('All events');
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [selectedStatus, setSelectedStatus] = useState<'All' | 'Open' | 'Upcoming' | 'Closed'>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [events, setEvents] = useState<EventItem[]>(DEFAULT_EVENTS);
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
@@ -40,8 +42,9 @@ export default function EventsDiscoveryPage() {
   }, []);
 
   const filteredEvents = events.filter((e) => {
-    if (activeTab === 'All events') return true;
-    return e.category === activeTab;
+    const matchesCategory = activeTab === 'All events' || e.category === activeTab;
+    const matchesStatus = selectedStatus === 'All' || e.status === selectedStatus;
+    return matchesCategory && matchesStatus;
   });
 
   return (
@@ -74,13 +77,96 @@ export default function EventsDiscoveryPage() {
               <span>Create event</span>
             </Link>
           )}
-          <button 
-            type="button"
-            className="bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-xs sm:text-sm font-semibold px-4 py-2.5 rounded-xl shadow-sm transition flex items-center gap-2 cursor-pointer"
-          >
-            <Filter size={15} />
-            <span>Filter</span>
-          </button>
+          {/* Filter Popover Dropdown */}
+          <div className="relative">
+            <button 
+              type="button"
+              onClick={() => setIsFilterOpen(!isFilterOpen)}
+              className={`border text-xs sm:text-sm font-semibold px-4 py-2.5 rounded-xl shadow-sm transition flex items-center gap-2 cursor-pointer ${
+                isFilterOpen || selectedStatus !== 'All'
+                  ? 'bg-blue-50 border-blue-300 text-blue-700'
+                  : 'bg-white hover:bg-slate-50 border-slate-300 text-slate-700'
+              }`}
+            >
+              <Filter size={15} />
+              <span>Filter</span>
+              {selectedStatus !== 'All' && (
+                <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+              )}
+            </button>
+
+            {isFilterOpen && (
+              <div className="absolute right-0 top-12 w-64 bg-white border border-slate-200 rounded-2xl shadow-xl p-4 text-xs space-y-3 z-30 animate-in fade-in zoom-in-95 duration-150">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <span className="font-bold text-slate-900">Filter Events</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedStatus('All');
+                      setActiveTab('All events');
+                    }}
+                    className="text-[11px] text-blue-600 hover:text-blue-800 font-semibold cursor-pointer"
+                  >
+                    Reset
+                  </button>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    Registration Status
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(['All', 'Open', 'Upcoming', 'Closed'] as const).map((st) => (
+                      <button
+                        key={st}
+                        type="button"
+                        onClick={() => setSelectedStatus(st)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${
+                          selectedStatus === st
+                            ? 'bg-blue-600 text-white font-bold'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        {st}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-1.5 pt-1">
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    Event Type
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(['All events', 'Hackathons', 'Workshops'] as const).map((cat) => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setActiveTab(cat)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${
+                          activeTab === cat
+                            ? 'bg-blue-600 text-white font-bold'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-slate-100 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setIsFilterOpen(false)}
+                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-[11px] transition"
+                  >
+                    Apply Filter
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

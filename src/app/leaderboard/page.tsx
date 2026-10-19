@@ -73,6 +73,7 @@ const DEFAULT_LEADERBOARD: LeaderboardTeam[] = [
 export default function HackGridLeaderboardPage() {
   const [teams, setTeams] = useState<LeaderboardTeam[]>(DEFAULT_LEADERBOARD);
   const [selectedEvent, setSelectedEvent] = useState('Campus Innovation Sprint 2026');
+  const [isLiveScored, setIsLiveScored] = useState(false);
 
   // Real-time Firestore sync
   useEffect(() => {
@@ -97,6 +98,9 @@ export default function HackGridLeaderboardPage() {
           };
         });
         setTeams(fetched.length >= 3 ? fetched : DEFAULT_LEADERBOARD);
+        setIsLiveScored(true);
+      } else {
+        setIsLiveScored(false);
       }
     });
 
@@ -139,6 +143,20 @@ export default function HackGridLeaderboardPage() {
             <option value="GreenTech Buildathon">GreenTech Buildathon</option>
           </select>
         </div>
+      </div>
+      {/* Live / Preliminary Standings Notice */}
+      <div className="flex items-center justify-between p-3.5 rounded-2xl bg-blue-50/70 border border-blue-100 text-xs text-blue-900">
+        <div className="flex items-center gap-2">
+          <Info size={16} className="text-blue-600 flex-shrink-0" />
+          <span>
+            {isLiveScored
+              ? "Official Verified Scores • Real-time judge rubrics synchronized."
+              : "Preliminary Standings • Live judging underway. Verified scores update automatically once judges finalize evaluation."}
+          </span>
+        </div>
+        <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100/80 text-blue-800">
+          {isLiveScored ? "LIVE SCORES" : "PREVIEW STANDINGS"}
+        </span>
       </div>
 
       {/* TOP 3 PODIUM CARDS (Matches media_1791829293626_31c14690.png) */}
