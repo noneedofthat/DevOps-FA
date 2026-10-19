@@ -4,9 +4,18 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { User, onAuthStateChanged, signInAnonymously, signOut, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { useSession, signOut as nextAuthSignOut } from "next-auth/react";
+
+export interface AppUser {
+  uid: string;
+  displayName: string | null;
+  email: string | null;
+  photoURL?: string | null;
+  [key: string]: any;
+}
 
 type AuthContextType = {
-  user: User | null;
+  user: AppUser | User | null;
   loading: boolean;
   isAdmin: boolean;
   userRole: 'admin' | 'participant';
@@ -32,7 +41,8 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const { data: session, status: sessionStatus } = useSession();
+  const [user, setUser] = useState<AppUser | User | null>(null);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [teamId, setTeamId] = useState<string | null>(null);
@@ -57,6 +67,34 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return Boolean(token || hasAdminCookie);
   };
 
+  // Synchronize NextAuth session (GitHub OAuth and Magic Link)
+  useEffect(() => {
+    if (sessionStatus === "loading") return;
+
+    if (session?.user) {
+      const nextUser: AppUser = {
+        uid: (session.user as any).id || (session.user as any).sub || session.user.email || 'participant_user',
+        displayName: session.user.name || session.user.email?.split('@')[0] || 'Participant',
+        email: session.user.email || '',
+        photoURL: session.user.image || null,
+      };
+      setUser(nextUser);
+      document.cookie = 'participant_session=true; path=/; max-age=28800; SameSite=Lax';
+
+      if (db) {
+        const qTeam = query(collection(db, "teams"), where("members", "array-contains", nextUser.uid));
+        const unsubTeam = onSnapshot(qTeam, (snapshot) => {
+          if (!snapshot.empty) {
+            setTeamId(snapshot.docs[0].id);
+          } else {
+            setTeamId(null);
+          }
+        });
+        return () => unsubTeam();
+      }
+    }
+  }, [session, sessionStatus]);
+
   useEffect(() => {
     // Initial validation
     setIsAdmin(checkAdminState());
@@ -78,28 +116,29 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
 
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
-      setIsAdmin(checkAdminState());
-      setLoading(false);
-
       if (currentUser) {
+        setUser(currentUser);
         document.cookie = 'participant_session=true; path=/; max-age=28800; SameSite=Lax';
-      }
 
-      // Check team membership if user exists
-      if (currentUser && db) {
-        const qTeam = query(collection(db, "teams"), where("members", "array-contains", currentUser.uid));
-        const unsubTeam = onSnapshot(qTeam, (snapshot) => {
-          if (!snapshot.empty) {
-            setTeamId(snapshot.docs[0].id);
-          } else {
-            setTeamId(null);
-          }
-        });
-        return () => unsubTeam();
-      } else {
+        if (db) {
+          const qTeam = query(collection(db, "teams"), where("members", "array-contains", currentUser.uid));
+          const unsubTeam = onSnapshot(qTeam, (snapshot) => {
+            if (!snapshot.empty) {
+              setTeamId(snapshot.docs[0].id);
+            } else {
+              setTeamId(null);
+            }
+          });
+          return () => unsubTeam();
+        }
+      } else if (!session?.user) {
+        // Only reset to null if NextAuth session is also not active
+        setUser(null);
         setTeamId(null);
       }
+
+      setIsAdmin(checkAdminState());
+      setLoading(false);
     });
 
     return () => {
@@ -107,7 +146,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       window.removeEventListener('focus', syncState);
       unsubscribe();
     };
-  }, []);
+  }, [session]);
 
   // Synchronize admin session when updated
   const setAdminSessionActive = (token: string, adminUser: string = 'admin') => {
@@ -159,6 +198,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   // Forceful session teardown: clears sessionStorage, localStorage, cookies, and redirects
   const logout = async () => {
+    try {
+      await nextAuthSignOut({ redirect: false });
+    } catch (e) {
+      console.error("NextAuth signOut error:", e);
+    }
+
     if (typeof window !== 'undefined') {
       // 1. Forcefully clear sessionStorage
       sessionStorage.clear();
@@ -213,7 +258,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   return (
     <AuthContext.Provider value={{ 
       user, 
-      loading, 
+      loading: loading && sessionStatus === "loading", 
       isAdmin, 
       userRole: isAdmin ? 'admin' : 'participant',
       teamId,
