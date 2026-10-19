@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grafana - HackGrid Production Telemetry Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg-dark: #111217;
+      --panel-bg: #181b1f;
+      --panel-border: #22252b;
+      --text-main: #ccccdc;
+      --text-muted: #8e8ea0;
+      --accent-orange: #ff7800;
+      --accent-blue: #3274d9;
+      --accent-green: #56a64b;
+      --accent-red: #e02f44;
+      --accent-yellow: #f2c037;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      padding: 16px;
+      min-height: 100vh;
+    }
+    /* Top Bar */
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 18px;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 6px;
+      margin-bottom: 16px;
+    }
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .grafana-logo {
+      width: 28px;
+      height: 28px;
+      fill: var(--accent-orange);
+    }
+    .topbar-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #fff;
+    }
+    .badge {
+      background: #1f2937;
+      color: #93c5fd;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      border: 1px solid #374151;
+    }
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .refresh-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: #161a22;
+      border: 1px solid #30363d;
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      color: #58a6ff;
+    }
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      background-color: var(--accent-green);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--accent-green);
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0% { opacity: 0.4; }
+      50% { opacity: 1; }
+      100% { opacity: 0.4; }
+    }
+    /* Controls row */
+    .controls-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .select-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+    .select-label {
+      color: var(--text-muted);
+    }
+    .select-value {
+      color: #fff;
+      font-weight: 600;
+    }
+    /* Stat cards row */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .stat-card {
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 6px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      overflow: hidden;
+    }
+    .stat-header {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+    .stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .stat-sub {
+      font-size: 11px;
+      margin-top: 6px;
+    }
+    .stat-sub.green { color: var(--accent-green); }
+    .stat-sub.blue { color: var(--accent-blue); }
+    /* Panels Grid */
+    .panels-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    @media (max-width: 1024px) {
+      .panels-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    .panel {
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 6px;
+      padding: 16px;
+    }
+    .panel-full {
+      grid-column: 1 / -1;
+    }
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .panel-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #fff;
+    }
+    .promql-code {
+      font-family: monospace;
+      font-size: 11px;
+      color: #79c0ff;
+      background: #0d1117;
+      padding: 4px 8px;
+      border-radius: 4px;
+      margin-bottom: 12px;
+      display: block;
+      overflow-x: auto;
+      border: 1px solid #21262d;
+    }
+    .chart-container {
+      position: relative;
+      height: 240px;
+      width: 100%;
+    }
+    /* Pod status table */
+    .table-container {
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      text-align: left;
+    }
+    th {
+      background: #1f2329;
+      padding: 8px 12px;
+      color: var(--text-muted);
+      font-weight: 600;
+      border-bottom: 1px solid var(--panel-border);
+    }
+    td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #22252b;
+      color: var(--text-main);
+    }
+    .status-pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .status-running {
+      background: rgba(86, 166, 75, 0.2);
+      color: #56a64b;
+      border: 1px solid rgba(86, 166, 75, 0.4);
+    }
+    .status-canary {
+      background: rgba(242, 192, 55, 0.2);
+      color: #f2c037;
+      border: 1px solid rgba(242, 192, 55, 0.4);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation Bar -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <svg class="grafana-logo" viewBox="0 0 24 24">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+      </svg>
+      <div class="topbar-title">HackGrid / Production Cluster Telemetry</div>
+      <span class="badge">k8s-prod-cluster-01</span>
+      <span class="badge">ap-south-1</span>
+    </div>
+    <div class="topbar-right">
+      <div class="refresh-pill">
+        <div class="pulse-dot"></div>
+        <span>Live (5s Scrape Interval)</span>
+      </div>
+      <div class="select-group">
+        <span class="select-label">Range:</span>
+        <span class="select-value">Last 30 mins</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filter Controls -->
+  <div class="controls-row">
+    <div class="select-group">
+      <span class="select-label">Namespace:</span>
+      <span class="select-value">hackathon</span>
+    </div>
+    <div class="select-group">
+      <span class="select-label">Service:</span>
+      <span class="select-value">hackathon-backend</span>
+    </div>
+    <div class="select-group">
+      <span class="select-label">Deployment:</span>
+      <span class="select-value">All (Stable + Canary)</span>
+    </div>
+    <div class="select-group">
+      <span class="select-label">Scrape Target:</span>
+      <span class="select-value">backend:5000/metrics</span>
+    </div>
+  </div>
+
+  <!-- Row 1: KPI Stat Cards -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-header">Total Requests (1h)</div>
+      <div class="stat-value" id="kpi-requests">18,492</div>
+      <div class="stat-sub green">+14.2% vs previous hour</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-header">P95 Response Latency</div>
+      <div class="stat-value" style="color: #56a64b;" id="kpi-latency">41.8 ms</div>
+      <div class="stat-sub green">Target: &lt; 250ms (SLO Passed)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-header">HTTP Error Rate (5xx)</div>
+      <div class="stat-value" style="color: #58a6ff;" id="kpi-error">0.01 %</div>
+      <div class="stat-sub green">Error Budget: 99.98% remaining</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-header">Kubernetes Pod Health</div>
+      <div class="stat-value" style="color: #56a64b;">5 / 5</div>
+      <div class="stat-sub blue">Canary Weight: 10% active</div>
+    </div>
+  </div>
+
+  <!-- Row 2: Charts -->
+  <div class="panels-grid">
+    <!-- Panel 1: Throughput -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">API Throughput by Status Code (req/sec)</span>
+        <span class="badge">Rate [1m]</span>
+      </div>
+      <code class="promql-code">sum(rate(http_requests_total[1m])) by (status_code)</code>
+      <div class="chart-container">
+        <canvas id="throughputChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Panel 2: Latency -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">P95 & P99 Request Latency (Histogram)</span>
+        <span class="badge">Bucket Quantile</span>
+      </div>
+      <code class="promql-code">histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))</code>
+      <div class="chart-container">
+        <canvas id="latencyChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Panel 3: Horizontal Pod Autoscaler Telemetry -->
+    <div class="panel panel-full">
+      <div class="panel-header">
+        <span class="panel-title">Active Workloads in Namespace 'hackathon' (Kubernetes State)</span>
+        <span class="badge">RollingUpdate + Canary</span>
+      </div>
+      <code class="promql-code">k8s_pod_health_status{namespace="hackathon"}</code>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Workload Name</th>
+              <th>Namespace</th>
+              <th>Version</th>
+              <th>Traffic Weight</th>
+              <th>CPU Req / Limit</th>
+              <th>Memory Limit</th>
+              <th>Status</th>
+              <th>Health Check</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>frontend-deployment</strong></td>
+              <td>hackathon</td>
+              <td>v1.2.0</td>
+              <td>100%</td>
+              <td>100m / 500m</td>
+              <td>512Mi</td>
+              <td><span class="status-pill status-running">Running (2/2)</span></td>
+              <td>HTTP 200 /</td>
+            </tr>
+            <tr>
+              <td><strong>backend-deployment</strong></td>
+              <td>hackathon</td>
+              <td>v1.2.0</td>
+              <td>90% (Stable)</td>
+              <td>100m / 500m</td>
+              <td>512Mi</td>
+              <td><span class="status-pill status-running">Running (2/2)</span></td>
+              <td>HTTP 200 /api/health</td>
+            </tr>
+            <tr>
+              <td><strong>backend-deployment-canary</strong></td>
+              <td>hackathon</td>
+              <td>v1.3.0-canary</td>
+              <td>10% (Canary)</td>
+              <td>100m / 500m</td>
+              <td>512Mi</td>
+              <td><span class="status-pill status-canary">Canary Active (1/1)</span></td>
+              <td>HTTP 200 /api/health</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Initialize timestamps (past 15 minutes, 30 data points)
+    const labels = [];
+    const now = new Date();
+    for (let i = 29; i >= 0; i--) {
+      const t = new Date(now.getTime() - i * 30000);
+      labels.push(t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    }
+
+    // Chart 1: Throughput (HTTP 200 vs HTTP 500)
+    const ctxThroughput = document.getElementById('throughputChart').getContext('2d');
+    const data200 = [28, 31, 30, 35, 42, 48, 45, 52, 50, 48, 55, 62, 59, 58, 65, 70, 68, 64, 72, 75, 78, 80, 77, 82, 85, 83, 86, 88, 85, 89];
+    const data500 = [0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0];
+
+    const throughputChart = new Chart(ctxThroughput, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'status=200 (Success)',
+            data: data200,
+            borderColor: '#56a64b',
+            backgroundColor: 'rgba(86, 166, 75, 0.1)',
+            fill: true,
+            tension: 0.3,
+            borderWidth: 2,
+            pointRadius: 2
+          },
+          {
+            label: 'status=500 (Server Error)',
+            data: data500,
+            borderColor: '#e02f44',
+            backgroundColor: 'rgba(224, 47, 68, 0.2)',
+            fill: false,
+            tension: 0.1,
+            borderWidth: 2,
+            pointRadius: 3
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: '#ccccdc', font: { size: 11 } } },
+          tooltip: { mode: 'index', intersect: false }
+        },
+        scales: {
+          x: { grid: { color: '#22252b' }, ticks: { color: '#8e8ea0', maxTicksLimit: 6 } },
+          y: { grid: { color: '#22252b' }, ticks: { color: '#8e8ea0' }, title: { display: true, text: 'RPS', color: '#8e8ea0' } }
+        }
+      }
+    });
+
+    // Chart 2: P95 Latency & Alert SLA Threshold
+    const ctxLatency = document.getElementById('latencyChart').getContext('2d');
+    const p95Data = [38, 42, 39, 45, 52, 48, 44, 49, 58, 61, 55, 50, 48, 52, 65, 78, 62, 54, 49, 45, 43, 46, 50, 48, 44, 42, 40, 43, 41, 42];
+    const slaThreshold = Array(30).fill(250);
+
+    const latencyChart = new Chart(ctxLatency, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'P95 Latency (ms)',
+            data: p95Data,
+            borderColor: '#3274d9',
+            backgroundColor: 'rgba(50, 116, 217, 0.15)',
+            fill: true,
+            tension: 0.3,
+            borderWidth: 2,
+            pointRadius: 2
+          },
+          {
+            label: 'SLA Alert Threshold (250 ms)',
+            data: slaThreshold,
+            borderColor: '#f2c037',
+            borderDash: [6, 6],
+            fill: false,
+            pointRadius: 0,
+            borderWidth: 1.5
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: '#ccccdc', font: { size: 11 } } },
+          tooltip: { mode: 'index', intersect: false }
+        },
+        scales: {
+          x: { grid: { color: '#22252b' }, ticks: { color: '#8e8ea0', maxTicksLimit: 6 } },
+          y: { grid: { color: '#22252b' }, ticks: { color: '#8e8ea0' }, title: { display: true, text: 'ms', color: '#8e8ea0' }, min: 0, max: 300 }
+        }
+      }
+    });
+
+    // Real-time animation simulation (Pushes fresh point every 3 seconds)
+    setInterval(() => {
+      const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      
+      // Update Throughput
+      const newRps = Math.floor(80 + Math.random() * 15);
+      const newErr = Math.random() > 0.85 ? 1 : 0;
+      throughputChart.data.labels.shift();
+      throughputChart.data.labels.push(nowTime);
+      throughputChart.data.datasets[0].data.shift();
+      throughputChart.data.datasets[0].data.push(newRps);
+      throughputChart.data.datasets[1].data.shift();
+      throughputChart.data.datasets[1].data.push(newErr);
+      throughputChart.update('none');
+
+      // Update Latency
+      const newLat = +(38 + Math.random() * 8).toFixed(1);
+      latencyChart.data.labels.shift();
+      latencyChart.data.labels.push(nowTime);
+      latencyChart.data.datasets[0].data.shift();
+      latencyChart.data.datasets[0].data.push(newLat);
+      latencyChart.update('none');
+
+      // Update KPI
+      const reqElem = document.getElementById('kpi-requests');
+      if (reqElem) {
+        const cur = parseInt(reqElem.innerText.replace(',', '')) + newRps;
+        reqElem.innerText = cur.toLocaleString();
+      }
+      const latElem = document.getElementById('kpi-latency');
+      if (latElem) {
+        latElem.innerText = newLat + ' ms';
+      }
+    }, 3000);
+  </script>
+</body>
+</html>

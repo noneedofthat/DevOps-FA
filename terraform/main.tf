@@ -67,12 +67,12 @@ resource "aws_instance" "hackathon_server" {
 
   # Allocate an 8GB root volume
   root_block_device {
-    volume_size = 8
+    volume_size = 20
     volume_type = "gp3"
   }
 
   tags = {
-    Name = "TenzorX-Hackathon-Backend"
+    Name = "HackGrid-Hackathon-Backend"
   }
 }
 

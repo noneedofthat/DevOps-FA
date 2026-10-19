@@ -30,7 +30,8 @@ ansible/inventory.ini
 
 # misc
 .DS_Store
-codebase_output*.txt
+codebase_*.txt
+.sf/
 
 # debug
 npm-debug.log*

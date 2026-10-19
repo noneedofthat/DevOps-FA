@@ -1,0 +1,49 @@
+# Site Reliability Engineering (SRE) Specification
+# Service Level Indicators (SLIs), Service Level Objectives (SLOs), and Error Budgets
+
+version: "v1alpha1"
+service: "hackathon-portal"
+tier: "Tier-1 Mission Critical"
+
+slos:
+  - name: "api_availability"
+    description: "Percentage of valid HTTP requests served with non-5xx status codes"
+    indicator:
+      sli_query: |
+        sum(rate(http_requests_total{status_code!~"5.."}[5m]))
+        /
+        sum(rate(http_requests_total[5m]))
+    objective: 99.90 # 99.9% Availability
+    window: "30d"
+    error_budget:
+      monthly_allowed_downtime_minutes: 43.2
+      burn_rate_alerts:
+        - window: "1h"
+          burn_rate: 14.4 # Consumes 2% of budget in 1 hour
+          severity: "critical"
+          action: "Page On-Call SRE & Freeze Deployments"
+        - window: "6h"
+          burn_rate: 6.0 # Consumes 5% of budget in 6 hours
+          severity: "warning"
+          action: "Notify Slack Channel #sre-alerts"
+
+  - name: "submission_upload_latency"
+    description: "Latency of asset uploads to the portal backend"
+    indicator:
+      sli_query: |
+        histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{route="/api/upload"}[5m])) by (le))
+    objective_threshold_seconds: 1.0 # 95% under 1 second
+    window: "7d"
+    severity: "high"
+
+  - name: "read_operations_latency"
+    description: "95th percentile latency for leaderboard and event queries"
+    indicator:
+      sli_query: |
+        histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{route!="/api/upload"}[5m])) by (le))
+    objective_threshold_seconds: 0.25 # 95% under 250ms
+    window: "30d"
+
+sla_agreements:
+  external_commitment: "99.00% Availability during Hackathon 48-Hour Sprint"
+  financial_penalty_credit: "10% hosting credit per 0.5% downtime violation"

@@ -1,250 +1,263 @@
 "use client";
 
-import { useState, useMemo, useEffect } from 'react';
-import { Trophy, ArrowUp, ArrowDown, ServerOff, Medal } from 'lucide-react';
-import { collection, onSnapshot } from 'firebase/firestore';
+import React, { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
+import { Trophy, Medal, Info, Search, ArrowUp, ArrowDown } from 'lucide-react';
+import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
-type TeamScore = {
+interface LeaderboardTeam {
   id: string;
   rank: number;
   name: string;
-  project: string;
-  track: string;
+  initials: string;
+  avatarBg: string;
   score: number;
-  infrastructureScore?: number;
-  configurationScore?: number;
-  deploymentScore?: number;
-};
+  track: string;
+  trackColor: string;
+}
 
-export default function LiveLeaderboardPage() {
-  const [data, setData] = useState<TeamScore[]>([]); 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeTrack, setActiveTrack] = useState('Overall Standings');
-  const [sortConfig, setSortConfig] = useState<{ key: keyof TeamScore; direction: 'asc' | 'desc' } | null>(null);
-  const [selectedTeam, setSelectedTeam] = useState<TeamScore | null>(null);
+const DEFAULT_LEADERBOARD: LeaderboardTeam[] = [
+  {
+    id: 'lead-1',
+    rank: 1,
+    name: 'Pixel Pioneers',
+    initials: 'P',
+    avatarBg: 'bg-purple-100 text-purple-700',
+    score: 942,
+    track: 'Sustainability',
+    trackColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  },
+  {
+    id: 'lead-2',
+    rank: 2,
+    name: 'Code Catalyst',
+    initials: 'CC',
+    avatarBg: 'bg-indigo-100 text-indigo-700',
+    score: 918,
+    track: 'AI for Social Impact',
+    trackColor: 'bg-blue-50 text-blue-700 border-blue-200',
+  },
+  {
+    id: 'lead-3',
+    rank: 3,
+    name: 'GreenStack',
+    initials: 'GS',
+    avatarBg: 'bg-emerald-100 text-emerald-700',
+    score: 891,
+    track: 'Sustainability',
+    trackColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  },
+  {
+    id: 'lead-4',
+    rank: 4,
+    name: 'Nova Labs',
+    initials: 'NL',
+    avatarBg: 'bg-sky-100 text-sky-700',
+    score: 876,
+    track: 'Design & Innovation',
+    trackColor: 'bg-pink-50 text-pink-700 border-pink-200',
+  },
+  {
+    id: 'lead-5',
+    rank: 5,
+    name: 'ByteForge',
+    initials: 'BF',
+    avatarBg: 'bg-pink-100 text-pink-700',
+    score: 852,
+    track: 'AI for Social Impact',
+    trackColor: 'bg-blue-50 text-blue-700 border-blue-200',
+  },
+];
 
+export default function HackGridLeaderboardPage() {
+  const [teams, setTeams] = useState<LeaderboardTeam[]>(DEFAULT_LEADERBOARD);
+  const [selectedEvent, setSelectedEvent] = useState('Campus Innovation Sprint 2026');
+
+  // Real-time Firestore sync
   useEffect(() => {
     if (!db) return;
-    
-    const unsubscribe = onSnapshot(collection(db, "leaderboard"), (snapshot) => {
-      const fetchedScores = snapshot.docs.map(doc => {
-        const d = doc.data();
-        // Deterministically mock the granular scores if they aren't in the DB yet
-        const inf = d.infrastructureScore || Math.floor(d.score * 0.4);
-        const conf = d.configurationScore || Math.floor(d.score * 0.3);
-        const dep = d.deploymentScore || (d.score - inf - conf);
-        
-        return {
-          id: doc.id,
-          infrastructureScore: inf,
-          configurationScore: conf,
-          deploymentScore: dep,
-          ...d
-        };
-      }) as TeamScore[];
-      setData(fetchedScores);
+    const q = query(collection(db, "leaderboard"), orderBy("score", "desc"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      if (!snapshot.empty) {
+        const fetched: LeaderboardTeam[] = snapshot.docs.map((docSnap, index) => {
+          const d = docSnap.data();
+          const isSus = (d.track || '').includes('Sustainability');
+          const isAi = (d.track || '').includes('AI');
+
+          return {
+            id: docSnap.id,
+            rank: index + 1,
+            name: d.name || `Team ${index + 1}`,
+            initials: (d.name || 'TM').substring(0, 2).toUpperCase(),
+            avatarBg: index === 0 ? 'bg-purple-100 text-purple-700' : index === 1 ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700',
+            score: d.score || 850,
+            track: d.track || (isSus ? 'Sustainability' : isAi ? 'AI for Social Impact' : 'Design & Innovation'),
+            trackColor: isSus ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : isAi ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-pink-50 text-pink-700 border-pink-200',
+          };
+        });
+        setTeams(fetched.length >= 3 ? fetched : DEFAULT_LEADERBOARD);
+      }
     });
 
     return () => unsubscribe();
   }, []);
 
-  const filteredAndSortedData = useMemo(() => {
-    let filtered = [...data];
-
-    if (activeTrack !== 'Overall Standings') {
-      filtered = filtered.filter(item => item.track === activeTrack);
-    }
-
-    if (searchQuery) {
-      filtered = filtered.filter(item => 
-        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.project.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-
-    if (sortConfig !== null) {
-      filtered.sort((a, b) => {
-        const valA = a[sortConfig.key] ?? 0;
-        const valB = b[sortConfig.key] ?? 0;
-        if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
-        if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
-        return 0;
-      });
-    }
-
-    // Assign dynamic ranks based on sorted score if no sort is active, else just keep original rank
-    if (sortConfig === null || sortConfig.key === 'score') {
-      filtered.sort((a, b) => b.score - a.score);
-      filtered = filtered.map((item, index) => ({ ...item, rank: index + 1 }));
-    }
-
-    return filtered;
-  }, [data, searchQuery, activeTrack, sortConfig]);
-
-  const requestSort = (key: keyof TeamScore) => {
-    let direction: 'asc' | 'desc' = 'asc';
-    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
-      direction = 'desc';
-    }
-    setSortConfig({ key, direction });
-  };
-
-  const renderSortIcon = (key: keyof TeamScore) => {
-    if (sortConfig?.key !== key) return null;
-    return sortConfig.direction === 'asc' ? <ArrowUp size={14} className="inline ml-1 text-blue-500" /> : <ArrowDown size={14} className="inline ml-1 text-blue-500" />;
-  };
-
-  const getRowClass = (rank: number) => {
-    switch (rank) {
-      case 1: return "bg-gradient-to-r from-amber-50 to-amber-100/50 hover:from-amber-100 hover:to-amber-200/50 border-l-4 border-amber-400";
-      case 2: return "bg-gradient-to-r from-slate-50 to-slate-100/50 hover:from-slate-100 hover:to-slate-200/50 border-l-4 border-slate-300";
-      case 3: return "bg-gradient-to-r from-orange-50 to-orange-100/50 hover:from-orange-100 hover:to-orange-200/50 border-l-4 border-orange-400";
-      default: return "hover:bg-blue-50/50 border-l-4 border-transparent";
-    }
-  };
-
-  const getRankBadge = (rank: number) => {
-    switch (rank) {
-      case 1: return <div className="flex items-center gap-1 text-amber-600"><Medal size={20} className="fill-amber-400"/> <span className="text-xl">1</span></div>;
-      case 2: return <div className="flex items-center gap-1 text-slate-500"><Medal size={20} className="fill-slate-300"/> <span className="text-xl">2</span></div>;
-      case 3: return <div className="flex items-center gap-1 text-orange-600"><Medal size={20} className="fill-orange-400"/> <span className="text-xl">3</span></div>;
-      default: return <span className="text-slate-500">{rank}</span>;
-    }
-  };
+  const top1 = teams[0];
+  const top2 = teams[1];
+  const top3 = teams[2];
 
   return (
-    <div className="space-y-6 relative max-w-7xl mx-auto">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 border-b border-slate-200 pb-4">
-        <div className="flex items-center gap-3">
-          <Trophy className="text-amber-500 w-10 h-10" />
-          <div>
-            <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Live Leaderboard</h2>
-            <p className="text-slate-500 text-sm mt-1">Real-time standings updated via WebSocket.</p>
+    <div className="w-full space-y-8 animate-in fade-in duration-300">
+      
+      {/* Breadcrumb & Header */}
+      <div className="border-b border-slate-200 pb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <div className="flex items-center gap-2 text-xs font-medium text-slate-400 mb-1">
+            <Link href="/" className="hover:text-slate-600">Workspace</Link>
+            <span>/</span>
+            <span className="text-slate-700 font-semibold">Leaderboard</span>
           </div>
+          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+            Leaderboard
+          </h1>
+          <p className="text-slate-500 text-sm mt-0.5">
+            Track the teams leading the Campus Innovation Sprint 2026.
+          </p>
         </div>
-        
-        <div className="flex gap-2 w-full md:w-auto">
-          <input 
-            type="text" 
-            placeholder="Search teams..." 
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="border-2 border-slate-200 rounded-xl px-4 py-2.5 text-sm flex-grow md:w-72 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition"
-          />
-        </div>
-      </div>
 
-      <div className="flex border-b border-slate-200 gap-8">
-        {['Overall Standings', 'Cloud Architecture', 'UI/UX Track'].map(track => (
-          <button 
-            key={track}
-            onClick={() => setActiveTrack(track)}
-            className={`pb-3 text-sm transition-colors ${activeTrack === track ? 'text-blue-600 border-b-2 border-blue-600 font-bold' : 'text-slate-500 hover:text-slate-800 font-semibold'}`}
+        {/* Event Selector */}
+        <div>
+          <select
+            value={selectedEvent}
+            onChange={(e) => setSelectedEvent(e.target.value)}
+            className="border border-slate-300 rounded-xl px-4 py-2 text-xs font-bold bg-white text-slate-800 shadow-sm focus:border-blue-600 outline-none transition cursor-pointer"
           >
-            {track}
-          </button>
-        ))}
+            <option value="Campus Innovation Sprint 2026">Campus Innovation Sprint 2026</option>
+            <option value="AI for Good Hackathon">AI for Good Hackathon</option>
+            <option value="Design the Future">Design the Future</option>
+            <option value="GreenTech Buildathon">GreenTech Buildathon</option>
+          </select>
+        </div>
       </div>
 
-      <div className="bg-white rounded-3xl shadow-lg border border-slate-200 overflow-hidden">
+      {/* TOP 3 PODIUM CARDS (Matches media_1791829293626_31c14690.png) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        
+        {/* Rank 1: Gold */}
+        {top1 && (
+          <div className="bg-amber-50/40 border border-amber-200/90 rounded-2xl p-6 shadow-sm flex items-center gap-4 relative overflow-hidden">
+            <div className="w-9 h-9 rounded-full bg-amber-400 text-white font-black text-sm flex items-center justify-center flex-shrink-0 shadow-sm">
+              1
+            </div>
+
+            <div className={`w-12 h-12 rounded-2xl ${top1.avatarBg} font-black text-base flex items-center justify-center flex-shrink-0 shadow-sm`}>
+              {top1.initials}
+            </div>
+
+            <div className="space-y-1">
+              <h3 className="font-bold text-sm text-slate-900">{top1.name}</h3>
+              <div className="font-mono font-bold text-sm text-blue-600">{top1.score} points</div>
+              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold border ${top1.trackColor}`}>
+                {top1.track}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Rank 2: Silver */}
+        {top2 && (
+          <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-6 shadow-sm flex items-center gap-4 relative overflow-hidden">
+            <div className="w-9 h-9 rounded-full bg-slate-400 text-white font-black text-sm flex items-center justify-center flex-shrink-0 shadow-sm">
+              2
+            </div>
+
+            <div className={`w-12 h-12 rounded-2xl ${top2.avatarBg} font-black text-base flex items-center justify-center flex-shrink-0 shadow-sm`}>
+              {top2.initials}
+            </div>
+
+            <div className="space-y-1">
+              <h3 className="font-bold text-sm text-slate-900">{top2.name}</h3>
+              <div className="font-mono font-bold text-sm text-blue-600">{top2.score} points</div>
+              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold border ${top2.trackColor}`}>
+                {top2.track}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Rank 3: Bronze */}
+        {top3 && (
+          <div className="bg-orange-50/40 border border-orange-200/90 rounded-2xl p-6 shadow-sm flex items-center gap-4 relative overflow-hidden">
+            <div className="w-9 h-9 rounded-full bg-orange-400 text-white font-black text-sm flex items-center justify-center flex-shrink-0 shadow-sm">
+              3
+            </div>
+
+            <div className={`w-12 h-12 rounded-2xl ${top3.avatarBg} font-black text-base flex items-center justify-center flex-shrink-0 shadow-sm`}>
+              {top3.initials}
+            </div>
+
+            <div className="space-y-1">
+              <h3 className="font-bold text-sm text-slate-900">{top3.name}</h3>
+              <div className="font-mono font-bold text-sm text-blue-600">{top3.score} points</div>
+              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold border ${top3.trackColor}`}>
+                {top3.track}
+              </span>
+            </div>
+          </div>
+        )}
+
+      </div>
+
+      {/* RANKINGS DATA TABLE (Matches media_1791829293626_31c14690.png) */}
+      <div className="bg-white border border-slate-200/90 rounded-2xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm whitespace-nowrap">
-            <thead className="bg-slate-50 text-slate-600 border-b border-slate-200 select-none uppercase tracking-wider text-xs">
+          <table className="w-full text-left text-xs whitespace-nowrap">
+            <thead className="bg-slate-50 border-b border-slate-200 select-none uppercase tracking-wider text-[11px] text-slate-500 font-bold">
               <tr>
-                <th className="px-6 py-4 font-bold w-16 cursor-pointer hover:bg-slate-100 transition" onClick={() => requestSort('rank')}>
-                  Rank {renderSortIcon('rank')}
-                </th>
-                <th className="px-6 py-4 font-bold cursor-pointer hover:bg-slate-100 transition" onClick={() => requestSort('name')}>
-                  Team Name {renderSortIcon('name')}
-                </th>
-                <th className="px-6 py-4 font-bold hidden lg:table-cell cursor-pointer hover:bg-slate-100 transition" onClick={() => requestSort('track')}>
-                  Track {renderSortIcon('track')}
-                </th>
-                <th className="px-6 py-4 font-bold text-center cursor-pointer hover:bg-slate-100 transition" onClick={() => requestSort('infrastructureScore')}>
-                  Infrastructure (TF) {renderSortIcon('infrastructureScore')}
-                </th>
-                <th className="px-6 py-4 font-bold text-center cursor-pointer hover:bg-slate-100 transition" onClick={() => requestSort('configurationScore')}>
-                  Configuration (Ansible) {renderSortIcon('configurationScore')}
-                </th>
-                <th className="px-6 py-4 font-bold text-center cursor-pointer hover:bg-slate-100 transition" onClick={() => requestSort('deploymentScore')}>
-                  Deployment (Docker) {renderSortIcon('deploymentScore')}
-                </th>
-                <th className="px-6 py-4 font-bold text-right cursor-pointer hover:bg-slate-100 transition text-blue-700" onClick={() => requestSort('score')}>
-                  Total Score {renderSortIcon('score')}
-                </th>
+                <th className="px-6 py-4 w-16">#</th>
+                <th className="px-6 py-4">Team</th>
+                <th className="px-6 py-4">Score</th>
+                <th className="px-6 py-4">Track</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredAndSortedData.map((team) => (
-                <tr 
-                  key={team.id} 
-                  className={`cursor-pointer transition-all ${getRowClass(team.rank)}`}
-                  onClick={() => setSelectedTeam(team)}
-                >
-                  <td className="px-6 py-5 font-black text-lg">{getRankBadge(team.rank)}</td>
-                  <td className="px-6 py-5">
-                    <div className="font-bold text-slate-900 text-base">{team.name}</div>
-                    <div className="text-xs text-slate-500 mt-1">{team.project}</div>
+              {teams.map((t) => (
+                <tr key={t.id} className="hover:bg-slate-50/80 transition">
+                  <td className="px-6 py-4 font-mono font-bold text-slate-400 text-sm">
+                    {t.rank}
                   </td>
-                  <td className="px-6 py-5 hidden lg:table-cell text-slate-500 font-medium">{team.track}</td>
-                  <td className="px-6 py-5 text-center font-mono font-medium text-slate-600">{team.infrastructureScore} / 40</td>
-                  <td className="px-6 py-5 text-center font-mono font-medium text-slate-600">{team.configurationScore} / 30</td>
-                  <td className="px-6 py-5 text-center font-mono font-medium text-slate-600">{team.deploymentScore} / 30</td>
-                  <td className="px-6 py-5 text-right font-mono font-black text-blue-600 text-xl">{team.score}</td>
-                </tr>
-              ))}
-              
-              {filteredAndSortedData.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-6 py-20 text-center">
-                    <div className="flex flex-col items-center justify-center opacity-50">
-                      <ServerOff size={64} className="text-slate-400 mb-4" />
-                      <h3 className="text-xl font-bold text-slate-600">No Infrastructure Deployed Yet</h3>
-                      <p className="text-slate-500 mt-2">Teams are currently building their environments. Check back soon!</p>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-xl ${t.avatarBg} font-bold text-xs flex items-center justify-center flex-shrink-0`}>
+                        {t.initials}
+                      </div>
+                      <span className="font-bold text-slate-900 text-xs sm:text-sm">
+                        {t.name}
+                      </span>
                     </div>
                   </td>
+                  <td className="px-6 py-4 font-mono font-bold text-slate-900 text-sm">
+                    {t.score}
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold border ${t.trackColor}`}>
+                      {t.track}
+                    </span>
+                  </td>
                 </tr>
-              )}
+              ))}
             </tbody>
           </table>
         </div>
+
+        {/* Footnote */}
+        <div className="p-4 bg-slate-50/60 border-t border-slate-100 flex items-center gap-2 text-xs text-slate-500">
+          <Info size={15} className="text-slate-400 flex-shrink-0" />
+          <span>Final rankings are confirmed after judging.</span>
+        </div>
       </div>
 
-      {selectedTeam && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white p-8 rounded-3xl shadow-2xl border border-slate-100 w-full max-w-md animate-in fade-in zoom-in duration-200">
-            <h3 className="font-black text-2xl text-slate-900 mb-1">{selectedTeam.name}</h3>
-            <p className="text-sm font-semibold text-blue-600 mb-8">{selectedTeam.track}</p>
-            
-            <div className="space-y-4 mb-8">
-              <div className="flex justify-between items-center text-sm border-b pb-3 border-slate-100">
-                <span className="text-slate-600 font-medium">Infrastructure (TF)</span>
-                <span className="font-mono font-bold text-slate-900">{selectedTeam.infrastructureScore} / 40</span>
-              </div>
-              <div className="flex justify-between items-center text-sm border-b pb-3 border-slate-100">
-                <span className="text-slate-600 font-medium">Configuration (Ansible)</span>
-                <span className="font-mono font-bold text-slate-900">{selectedTeam.configurationScore} / 30</span>
-              </div>
-              <div className="flex justify-between items-center text-sm border-b pb-3 border-slate-100">
-                <span className="text-slate-600 font-medium">Deployment (Docker)</span>
-                <span className="font-mono font-bold text-slate-900">{selectedTeam.deploymentScore} / 30</span>
-              </div>
-              <div className="flex justify-between items-center pt-2">
-                <span className="font-black text-slate-800">Total Score</span>
-                <span className="font-mono font-black text-blue-600 text-3xl">{selectedTeam.score}</span>
-              </div>
-            </div>
-            
-            <button 
-              onClick={() => setSelectedTeam(null)}
-              className="w-full bg-slate-100 text-slate-800 py-3 rounded-xl text-sm font-bold hover:bg-slate-200 transition"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

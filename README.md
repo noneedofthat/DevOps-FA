@@ -1,8 +1,8 @@
 # Hackathon & Tech Event Management Portal
 
-**TenzorX 2026** - A highly scalable, cloud-native web application designed to streamline the lifecycle of technical competitions, from event discovery to final submissions and real-time leaderboards.
+**HackGrid 2026** - A highly scalable, cloud-native web application designed to streamline the lifecycle of technical competitions, from event discovery to final submissions and real-time leaderboards.
 
-## 🚀 Tech Stack
+## Tech Stack
 
 ### Frontend & Client Architecture
 - **Framework:** Next.js (React) utilizing the App Router.
@@ -24,7 +24,7 @@
 
 ---
 
-## 📂 Project Structure
+## Project Structure
 
 ```
 .
@@ -49,7 +49,7 @@
 
 ---
 
-## 🛠️ Getting Started
+## Getting Started
 
 ### Prerequisites
 - Node.js (v18+)
@@ -89,7 +89,7 @@ docker-compose up --build
 
 ---
 
-## ☁️ DevOps & Deployment
+## DevOps & Deployment
 
 ### 1. Infrastructure Provisioning (Terraform)
 Navigate to the `terraform/` directory and apply the AWS configuration to spin up the EC2 instance and Security Groups.

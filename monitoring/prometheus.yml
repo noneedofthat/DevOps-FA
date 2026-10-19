@@ -1,0 +1,46 @@
+# Prometheus Configuration (Unit IV: Metrics Pillar of Observability)
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'hackathon-portal-observability'
+    cluster: 'k8s-prod-cluster-01'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            # - alertmanager:9093
+
+# Rules files for SRE Error Budget Burn & Pod Alerting
+rule_files:
+  # - "alert_rules.yml"
+
+scrape_configs:
+  # 1. Scrape Backend Application Telemetry
+  - job_name: 'hackathon-backend'
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['backend:5000', 'localhost:5000', 'host.docker.internal:5000']
+        labels:
+          service: 'hackathon-backend'
+          environment: 'production'
+
+  # 2. Scrape Prometheus Self Metrics
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # 3. Scrape Kubernetes Host Node Exporter (CPU, Memory, Disk, Network)
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          tier: 'infrastructure'
+
+  # 4. Scrape Kubernetes State Metrics (Pod statuses, replica counts)
+  - job_name: 'kube-state-metrics'
+    static_configs:
+      - targets: ['kube-state-metrics:8080']
