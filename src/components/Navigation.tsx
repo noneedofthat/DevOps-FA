@@ -94,13 +94,25 @@ export default function Navigation() {
           </nav>
         </div>
 
-        {/* Bottom Platform Status */}
+        {/* Bottom Platform Status & Discreet Faculty/Admin Access */}
         <div className="p-4 border-t border-slate-100 text-[11px] text-slate-400">
           <div className="flex items-center gap-2 mb-1">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
             <span className="font-semibold text-slate-700">Sprint 2026 Live</span>
           </div>
-          <div>Department of Computer Eng.</div>
+          <div className="flex items-center justify-between pt-0.5">
+            <span>Department of Computer Eng.</span>
+            {!isAdmin && (
+              <Link 
+                href="/admin/login" 
+                className="text-slate-400 hover:text-blue-600 transition flex items-center gap-1 font-semibold hover:underline"
+                title="Admin & Faculty MFA Portal"
+              >
+                <Shield size={12} />
+                <span>Admin</span>
+              </Link>
+            )}
+          </div>
         </div>
       </aside>
 
