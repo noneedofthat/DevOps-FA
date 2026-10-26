@@ -23,7 +23,16 @@ export async function POST(request: Request) {
       body: JSON.stringify({ email, password, totp: totp || totpCode }),
     });
 
-    const data = await response.json();
+    let data: any = {};
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      data = await response.json().catch(() => ({}));
+    } else {
+      return NextResponse.json(
+        { success: false, error: `Backend service returned unexpected response (status ${response.status}).` },
+        { status: response.status || 502 }
+      );
+    }
 
     if (!response.ok || !data.success) {
       return NextResponse.json(

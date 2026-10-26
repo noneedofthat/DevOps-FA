@@ -52,6 +52,10 @@ export interface VerifyAdminResult {
 }
 
 const getApiBaseUrl = (): string => {
+  if (typeof window !== 'undefined') {
+    // In browser, use same-origin relative URL so Next.js proxies to backend seamlessly
+    return '';
+  }
   return (
     process.env.NEXT_PUBLIC_API_URL ||
     process.env.NEXT_PUBLIC_BACKEND_URL ||
