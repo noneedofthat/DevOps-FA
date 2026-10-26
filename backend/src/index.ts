@@ -463,21 +463,31 @@ app.post('/api/invite', (req: Request, res: Response) => {
 });
 
 
-// Secure file upload endpoint
-app.post('/api/upload', upload.single('asset'), (req: Request, res: Response) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'No file uploaded' });
-  }
+// Secure file upload endpoint supporting both 'asset' and 'file' field keys
+app.post('/api/upload', (req: Request, res: Response, next: NextFunction) => {
+  upload.any()(req, res, (err: any) => {
+    if (err) return next(err);
+    const uploadedFile = (req.files && (req.files as Express.Multer.File[]).length > 0)
+      ? (req.files as Express.Multer.File[])[0]
+      : req.file;
 
-  const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
-  const fileInfo = {
-    originalName: req.file.originalname,
-    mimetype: req.file.mimetype,
-    size: req.file.size,
-    url: `${baseUrl}/uploads/${req.file.filename}`
-  };
+    if (!uploadedFile) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
 
-  res.json({ message: 'File uploaded successfully', file: fileInfo });
+    const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost:5000';
+    const proto = req.headers['x-forwarded-proto'] || 'http';
+    const baseUrl = process.env.BASE_URL || `${proto}://${host}`;
+    const fileUrl = `${baseUrl}/uploads/${uploadedFile.filename}`;
+    const fileInfo = {
+      originalName: uploadedFile.originalname,
+      mimetype: uploadedFile.mimetype,
+      size: uploadedFile.size,
+      url: fileUrl
+    };
+
+    res.json({ message: 'File uploaded successfully', file: fileInfo, fileUrl, url: fileUrl });
+  });
 });
 
 // Centralized error-handling middleware for Multer file validation

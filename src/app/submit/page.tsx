@@ -148,18 +148,20 @@ export default function ProjectSubmissionPage() {
       const payloadString = `${uniqueSubId}-${data.title}-${data.githubUrl}-${file.name}-${unixTime}`;
       const sha256 = await computeSha256(payloadString);
 
-      // Upload file to backend endpoint if running
+      // Upload file to backend endpoint via same-origin proxy in browser
       let assetUrl = '';
       try {
+        const uploadEndpoint = typeof window !== 'undefined' ? '/api/upload' : `${BACKEND_URL}/api/upload`;
         const formData = new FormData();
         formData.append('file', file);
-        const res = await fetch(`${BACKEND_URL}/api/upload`, {
+        formData.append('asset', file);
+        const res = await fetch(uploadEndpoint, {
           method: 'POST',
           body: formData,
         });
         if (res.ok) {
           const resData = await res.json();
-          assetUrl = resData.fileUrl || '';
+          assetUrl = resData.fileUrl || resData.url || resData.file?.url || '';
         }
       } catch (err) {
         console.warn('Backend upload server offline, proceeding with local document reference', err);

@@ -46,6 +46,14 @@ const nextConfig: NextConfig = {
         source: "/api/admin/totp-info",
         destination: `${process.env.BACKEND_INTERNAL_URL || "http://localhost:5000"}/api/admin/totp-info`,
       },
+      {
+        source: "/api/upload",
+        destination: `${process.env.BACKEND_INTERNAL_URL || "http://localhost:5000"}/api/upload`,
+      },
+      {
+        source: "/uploads/:path*",
+        destination: `${process.env.BACKEND_INTERNAL_URL || "http://localhost:5000"}/uploads/:path*`,
+      },
     ];
   },
 };
