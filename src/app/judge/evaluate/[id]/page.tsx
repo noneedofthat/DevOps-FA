@@ -47,6 +47,7 @@ export default function JudgeEvaluatePage() {
   const [projectData, setProjectData] = useState({
     title: 'CropSense',
     teamName: 'Pixel Pioneers',
+    track: 'Design & Innovation',
     membersCount: 4,
     description: 'An AI-powered plant disease detection platform that helps farmers identify diseases early using leaf images.',
     githubUrl: 'https://github.com/username/cropsense',
@@ -63,9 +64,14 @@ export default function JudgeEvaluatePage() {
     getDoc(doc(db, "submissions", submissionId)).then((snap) => {
       if (snap.exists()) {
         const d = snap.data();
+        const isSus = (d.category || d.track || '').includes('Sustainability');
+        const isAi = (d.category || d.track || '').includes('AI') || (d.category || '').includes('AIML');
+        const trackLabel = isSus ? 'Sustainability' : isAi ? 'AI for Social Impact' : 'Design & Innovation';
+
         setProjectData({
-          title: d.title || 'CropSense',
-          teamName: d.teamName || d.submittedByName || 'Pixel Pioneers',
+          title: d.title || '3D Gaussian',
+          teamName: d.teamName || d.submittedByName || 'D_039_Sahil_Kasture',
+          track: trackLabel,
           membersCount: 4,
           description: d.description || '',
           githubUrl: d.githubUrl || d.repoUrl || 'https://github.com',
@@ -108,7 +114,7 @@ export default function JudgeEvaluatePage() {
         await addDoc(collection(db, "leaderboard"), {
           name: projectData.teamName,
           project: projectData.title,
-          track: 'AI for Social Impact',
+          track: projectData.track || 'Design & Innovation',
           score: totalScore,
           innovationScore: scores.innovation,
           technicalScore: scores.technical,

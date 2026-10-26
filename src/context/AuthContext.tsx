@@ -52,15 +52,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (typeof window === 'undefined') return false;
 
     // Strict validation: An admin session MUST have an active admin_session=true cookie
-    const hasAdminCookie = document.cookie
-      .split(';')
-      .some((item) => item.trim() === 'admin_session=true');
+    const hasAdminCookie = /(?:^|;\s*)admin_session=true(?=;|$)/.test(document.cookie);
 
     if (!hasAdminCookie) {
-      // If cookie was wiped or expired, purge any lingering storage tokens to prevent phantom hydration
-      sessionStorage.removeItem('adminSessionToken');
-      sessionStorage.removeItem('adminSessionUser');
-      return false;
+      // If cookie was wiped or expired and not on an admin route, purge storage tokens
+      const onAdminRoute = window.location.pathname.startsWith('/admin');
+      if (!onAdminRoute) {
+        sessionStorage.removeItem('adminSessionToken');
+        sessionStorage.removeItem('adminSessionUser');
+        return false;
+      }
     }
 
     const token = sessionStorage.getItem('adminSessionToken');
@@ -70,6 +71,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // Synchronize NextAuth session (GitHub OAuth and Magic Link)
   useEffect(() => {
     if (sessionStatus === "loading") return;
+
+    // Isolate Admin Session: Do not overwrite Faculty Administrator identity with participant tokens
+    if (checkAdminState()) {
+      const activeAdminEmail = typeof window !== 'undefined' ? (sessionStorage.getItem('adminSessionUser') || 'admin@hackgrid.internal') : 'admin@hackgrid.internal';
+      setUser({
+        uid: 'admin_faculty_council',
+        displayName: 'Faculty Administrator',
+        email: activeAdminEmail,
+        photoURL: null,
+      });
+      setIsAdmin(true);
+      return;
+    }
 
     if (session?.user) {
       const nextUser: AppUser = {
@@ -97,11 +111,31 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     // Initial validation
-    setIsAdmin(checkAdminState());
+    const hasAdminSession = checkAdminState();
+    setIsAdmin(hasAdminSession);
+    if (hasAdminSession) {
+      const activeAdminEmail = typeof window !== 'undefined' ? (sessionStorage.getItem('adminSessionUser') || 'admin@hackgrid.internal') : 'admin@hackgrid.internal';
+      setUser({
+        uid: 'admin_faculty_council',
+        displayName: 'Faculty Administrator',
+        email: activeAdminEmail,
+        photoURL: null,
+      });
+    }
 
     // Sync admin state on window focus or storage changes (e.g. cookie deletion in dev tools)
     const syncState = () => {
-      setIsAdmin(checkAdminState());
+      const adminActive = checkAdminState();
+      setIsAdmin(adminActive);
+      if (adminActive) {
+        const activeAdminEmail = typeof window !== 'undefined' ? (sessionStorage.getItem('adminSessionUser') || 'admin@hackgrid.internal') : 'admin@hackgrid.internal';
+        setUser({
+          uid: 'admin_faculty_council',
+          displayName: 'Faculty Administrator',
+          email: activeAdminEmail,
+          photoURL: null,
+        });
+      }
     };
 
     window.addEventListener('storage', syncState);
@@ -116,6 +150,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
 
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (checkAdminState()) {
+        const activeAdminEmail = typeof window !== 'undefined' ? (sessionStorage.getItem('adminSessionUser') || 'admin@hackgrid.internal') : 'admin@hackgrid.internal';
+        setUser({
+          uid: 'admin_faculty_council',
+          displayName: 'Faculty Administrator',
+          email: activeAdminEmail,
+          photoURL: null,
+        });
+        setIsAdmin(true);
+        setLoading(false);
+        return;
+      }
+
       if (currentUser) {
         setUser(currentUser);
         document.cookie = 'participant_session=true; path=/; max-age=28800; SameSite=Lax';
@@ -132,9 +179,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           return () => unsubTeam();
         }
       } else if (!session?.user) {
-        // Only reset to null if NextAuth session is also not active
-        setUser(null);
-        setTeamId(null);
+        // Only reset to null if NextAuth session and demo session are also not active
+        const storedDemo = typeof window !== 'undefined' ? sessionStorage.getItem('demo_participant_user') : null;
+        if (storedDemo) {
+          try {
+            setUser(JSON.parse(storedDemo));
+          } catch (e) {
+            setUser(null);
+            setTeamId(null);
+          }
+        } else {
+          setUser(null);
+          setTeamId(null);
+        }
       }
 
       setIsAdmin(checkAdminState());
@@ -153,8 +210,24 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (typeof window !== 'undefined') {
       sessionStorage.setItem('adminSessionToken', token);
       sessionStorage.setItem('adminSessionUser', adminUser);
+      sessionStorage.removeItem('demo_participant_user');
       document.cookie = `admin_session=true; path=/; max-age=28800; SameSite=Lax`;
+      document.cookie = `participant_session=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
+      document.cookie = `next-auth.session-token=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
+      document.cookie = `__Secure-next-auth.session-token=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
       setIsAdmin(true);
+      setUser({
+        uid: 'admin_faculty_council',
+        displayName: 'Faculty Administrator',
+        email: adminUser,
+        photoURL: null,
+      });
+      try {
+        nextAuthSignOut({ redirect: false });
+      } catch {}
+      try {
+        if (auth) signOut(auth);
+      } catch {}
     }
   };
 
@@ -162,37 +235,53 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (typeof window !== 'undefined') {
       sessionStorage.removeItem('adminSessionToken');
       sessionStorage.removeItem('adminSessionUser');
+      sessionStorage.removeItem('demo_participant_user');
+      // Instruct Next.js server route to clear the HttpOnly admin_jwt cookie
+      fetch('/api/admin/auth', { method: 'DELETE' }).catch(() => {});
       document.cookie = `admin_session=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
+      document.cookie = `participant_session=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
+      document.cookie = `next-auth.session-token=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
+      document.cookie = `__Secure-next-auth.session-token=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
       setIsAdmin(false);
+      setUser(null);
+      try {
+        nextAuthSignOut({ redirect: false });
+      } catch {}
+      try {
+        if (auth) signOut(auth);
+      } catch {}
     }
   };
 
   const loginAnonymously = async () => {
-    if (!auth) return;
+    const demoUser: AppUser = {
+      uid: 'demo_participant_' + Math.random().toString(36).substring(2, 9),
+      displayName: 'Demo Participant',
+      email: 'student.demo@pccoe.edu',
+    };
     try {
-      await signInAnonymously(auth);
-      if (typeof window !== 'undefined') {
-        document.cookie = 'participant_session=true; path=/; max-age=28800; SameSite=Lax';
+      if (auth) {
+        await signInAnonymously(auth);
       }
     } catch (error) {
-      console.error("Anonymous auth error:", error);
+      console.warn("Firebase anonymous auth fallback:", error);
+    } finally {
+      if (typeof window !== 'undefined') {
+        document.cookie = 'participant_session=true; path=/; max-age=28800; SameSite=Lax';
+        sessionStorage.setItem('demo_participant_user', JSON.stringify(demoUser));
+        setUser(demoUser);
+      }
     }
   };
 
   const loginWithGoogle = async () => {
     if (!auth) {
-      alert("Firebase is not configured! Please provide your Firebase credentials.");
-      return;
+      throw new Error("Firebase authentication service is not initialized.");
     }
     const provider = new GoogleAuthProvider();
-    try {
-      await signInWithPopup(auth, provider);
-      if (typeof window !== 'undefined') {
-        document.cookie = 'participant_session=true; path=/; max-age=28800; SameSite=Lax';
-      }
-    } catch (error) {
-      console.error("Google Participant Auth error:", error);
-      alert("Participant authentication failed or was cancelled.");
+    await signInWithPopup(auth, provider);
+    if (typeof window !== 'undefined') {
+      document.cookie = 'participant_session=true; path=/; max-age=28800; SameSite=Lax';
     }
   };
 
@@ -205,6 +294,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
 
     if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('demo_participant_user');
       // 1. Forcefully clear sessionStorage
       sessionStorage.clear();
 

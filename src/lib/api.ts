@@ -92,7 +92,9 @@ export async function fetchActiveEvents(): Promise<EventItem[]> {
 
 /**
  * Verify admin credentials and 6-digit TOTP code against backend (/api/admin/verify)
- * Handles rate limiting (HTTP 429) and provides secure session tokens
+/**
+ * Verify admin credentials and 6-digit TOTP code against the Next.js auth endpoint (/api/admin/auth)
+ * The endpoint handles backend validation, rate limiting, and issues an HttpOnly signed JWT cookie.
  */
 export async function verifyAdminTOTP(
   email: string,
@@ -111,10 +113,9 @@ export async function verifyAdminTOTP(
     };
   }
 
-  const apiUrl = getApiBaseUrl();
-
   try {
-    const response = await fetch(`${apiUrl}/api/admin/verify`, {
+    // Send to Next.js same-origin route handler to establish HttpOnly signed cookie
+    const response = await fetch('/api/admin/auth', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -139,39 +140,46 @@ export async function verifyAdminTOTP(
       };
     }
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
       return {
         success: false,
-        error: errorData.error || 'Access denied: Invalid credentials or TOTP authentication code.',
+        error: data.error || 'Access denied: Invalid credentials or TOTP authentication code.',
       };
     }
 
-    const data = await response.json();
     return {
       success: true,
-      token: data.token || 'hackgrid-admin-totp-jwt',
+      token: data.token,
       admin: data.admin,
     };
   } catch (error: any) {
-    // Strictly isolate the bypass to local development environments
-    if (process.env.NODE_ENV === 'development') {
-      const cleanUser = email.trim().toLowerCase();
-      const cleanPass = password.trim();
-
-      if (cleanUser === 'admin@hackgrid.internal' && cleanPass === 'PCCOE-DevOps-2026') {
-        return {
-          success: true,
-          token: 'hackgrid-admin-totp-verified-token',
-          admin: { role: 'Faculty Administrator', username: email }
-        };
-      }
-    }
-
-    // Production behavior: Always fail closed on network errors
+    // Production behavior: Always fail closed on network errors. Zero hardcoded bypasses.
     return {
       success: false,
       error: error?.message || 'Authentication service unreachable.',
     };
+  }
+}
+
+/**
+ * Fetch TOTP setup & verification parameters for demonstration and evaluation
+ */
+export async function fetchAdminTotpInfo(): Promise<{
+  algorithm: string;
+  timeStepSeconds: number;
+  digits: number;
+  secretBase32: string;
+  currentLiveCode: string;
+  validUser: string;
+} | null> {
+  const apiUrl = getApiBaseUrl();
+  try {
+    const res = await fetch(`${apiUrl}/api/admin/totp-info`, { cache: 'no-store' });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
   }
 }

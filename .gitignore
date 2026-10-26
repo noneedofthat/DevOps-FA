@@ -39,10 +39,16 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# runtime stores
+.data/
+
 # env files (ignore local secrets, explicitly allow .env.example)
+.env
 .env*.local
 .env.local
+backend/.env
 !.env.example
+!backend/.env.example
 
 # vercel
 .vercel

@@ -24,7 +24,7 @@ const DEFAULT_LEADERBOARD: LeaderboardTeam[] = [
     name: 'Pixel Pioneers',
     initials: 'P',
     avatarBg: 'bg-purple-100 text-purple-700',
-    score: 942,
+    score: 86,
     track: 'Sustainability',
     trackColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   },
@@ -34,7 +34,7 @@ const DEFAULT_LEADERBOARD: LeaderboardTeam[] = [
     name: 'Code Catalyst',
     initials: 'CC',
     avatarBg: 'bg-indigo-100 text-indigo-700',
-    score: 918,
+    score: 78,
     track: 'AI for Social Impact',
     trackColor: 'bg-blue-50 text-blue-700 border-blue-200',
   },
@@ -44,7 +44,7 @@ const DEFAULT_LEADERBOARD: LeaderboardTeam[] = [
     name: 'GreenStack',
     initials: 'GS',
     avatarBg: 'bg-emerald-100 text-emerald-700',
-    score: 891,
+    score: 74,
     track: 'Sustainability',
     trackColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   },
@@ -54,7 +54,7 @@ const DEFAULT_LEADERBOARD: LeaderboardTeam[] = [
     name: 'Nova Labs',
     initials: 'NL',
     avatarBg: 'bg-sky-100 text-sky-700',
-    score: 876,
+    score: 70,
     track: 'Design & Innovation',
     trackColor: 'bg-pink-50 text-pink-700 border-pink-200',
   },
@@ -64,7 +64,7 @@ const DEFAULT_LEADERBOARD: LeaderboardTeam[] = [
     name: 'ByteForge',
     initials: 'BF',
     avatarBg: 'bg-pink-100 text-pink-700',
-    score: 852,
+    score: 65,
     track: 'AI for Social Impact',
     trackColor: 'bg-blue-50 text-blue-700 border-blue-200',
   },
@@ -92,14 +92,33 @@ export default function HackGridLeaderboardPage() {
             name: d.name || `Team ${index + 1}`,
             initials: (d.name || 'TM').substring(0, 2).toUpperCase(),
             avatarBg: index === 0 ? 'bg-purple-100 text-purple-700' : index === 1 ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700',
-            score: d.score || 850,
+            score: typeof d.score === 'number' ? (d.score > 100 ? Math.round(d.score / 10) : d.score) : 75,
             track: d.track || (isSus ? 'Sustainability' : isAi ? 'AI for Social Impact' : 'Design & Innovation'),
             trackColor: isSus ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : isAi ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-pink-50 text-pink-700 border-pink-200',
           };
         });
-        setTeams(fetched.length >= 3 ? fetched : DEFAULT_LEADERBOARD);
+
+        // Merge real evaluated teams with default mock teams so leaderboard always has >= 5 entries
+        const realNames = new Set(fetched.map(t => t.name.toLowerCase().trim()));
+        const remainingMock = DEFAULT_LEADERBOARD.filter(m => !realNames.has(m.name.toLowerCase().trim()));
+        const combined = [...fetched, ...remainingMock]
+          .sort((a, b) => b.score - a.score)
+          .map((team, idx) => ({
+            ...team,
+            rank: idx + 1,
+            avatarBg: idx === 0 
+              ? 'bg-purple-100 text-purple-700' 
+              : idx === 1 
+              ? 'bg-indigo-100 text-indigo-700' 
+              : idx === 2
+              ? 'bg-emerald-100 text-emerald-700'
+              : 'bg-slate-100 text-slate-700',
+          }));
+
+        setTeams(combined);
         setIsLiveScored(true);
       } else {
+        setTeams(DEFAULT_LEADERBOARD);
         setIsLiveScored(false);
       }
     });

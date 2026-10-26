@@ -17,17 +17,36 @@ export default function AdminRouteGuard({ children }: AdminRouteGuardProps) {
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    // Check session storage token and context claim
-    const storedToken = sessionStorage.getItem('adminSessionToken');
-    const hasAdminAccess = isAdmin || !!storedToken;
-
-    if (!hasAdminAccess) {
-      setIsAuthorized(false);
-      // Immediately redirect standard users back to /team
-      router.replace('/team');
-    } else {
-      setIsAuthorized(true);
-    }
+    // Cryptographic verification via server endpoint
+    fetch('/api/admin/auth')
+      .then(async (res) => {
+        if (res.ok) {
+          try {
+            const data = await res.json();
+            if (data?.user) {
+              sessionStorage.setItem('adminSessionUser', data.user);
+            }
+          } catch {}
+          document.cookie = 'admin_session=true; path=/; max-age=28800; SameSite=Lax';
+          document.cookie = 'participant_session=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+          setIsAuthorized(true);
+        } else {
+          setIsAuthorized(false);
+          sessionStorage.removeItem('adminSessionToken');
+          sessionStorage.removeItem('adminSessionUser');
+          router.replace('/admin/login');
+        }
+      })
+      .catch(() => {
+        // Offline fallback verification
+        const storedToken = sessionStorage.getItem('adminSessionToken');
+        if (!storedToken && !isAdmin) {
+          setIsAuthorized(false);
+          router.replace('/admin/login');
+        } else {
+          setIsAuthorized(true);
+        }
+      });
   }, [isAdmin, router]);
 
   if (isAuthorized === false) {

@@ -11,8 +11,9 @@ import { useAuth } from "@/context/AuthContext";
 
 export default function Navigation() {
   const pathname = usePathname();
-  const { user, isAdmin, logout } = useAuth();
+  const { user, isAdmin, logout, clearAdminSession } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
+
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
@@ -52,11 +53,30 @@ export default function Navigation() {
     return "Workspace";
   };
 
-  const userInitials = user?.displayName 
-    ? user.displayName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)
-    : user?.email
-    ? user.email.slice(0, 2).toUpperCase()
-    : "GU";
+  // Derive active user identity with strict Admin role isolation
+  const storedAdminEmail = typeof window !== 'undefined' ? sessionStorage.getItem('adminSessionUser') : null;
+  const isViewingAdmin = pathname.startsWith('/admin') || (isAdmin && Boolean(storedAdminEmail));
+
+  const displayUser = isViewingAdmin
+    ? {
+        displayName: 'Faculty Administrator',
+        email: storedAdminEmail || 'admin@hackgrid.internal',
+        initials: 'FA',
+        roleBadge: 'Council Admin',
+      }
+    : {
+        displayName: user?.displayName || (user ? 'Participant' : 'Guest User'),
+        email: user?.email || 'Not signed in',
+        initials: user?.displayName
+          ? user.displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
+          : user?.email
+          ? user.email.slice(0, 2).toUpperCase()
+          : 'GU',
+        roleBadge: null,
+      };
+
+  const userInitials = displayUser.initials;
+
 
   return (
     <>
@@ -219,7 +239,7 @@ export default function Navigation() {
               }}
               className="flex items-center gap-2 p-1 rounded-xl hover:bg-slate-100 transition cursor-pointer"
             >
-              <div className="w-8 h-8 rounded-full bg-slate-900 text-white font-black text-xs flex items-center justify-center shadow-sm">
+              <div className={`w-8 h-8 rounded-full ${isViewingAdmin ? 'bg-blue-600' : 'bg-slate-900'} text-white font-black text-xs flex items-center justify-center shadow-sm`}>
                 {userInitials}
               </div>
               <ChevronDown size={14} className="text-slate-400" />
@@ -227,33 +247,73 @@ export default function Navigation() {
 
             {/* Profile Dropdown */}
             {isProfileOpen && (
-              <div className="absolute right-0 top-11 w-48 bg-white border border-slate-200 rounded-2xl shadow-xl p-2 text-xs space-y-1 z-50 animate-in fade-in zoom-in-95 duration-150">
+              <div className="absolute right-0 top-11 w-52 bg-white border border-slate-200 rounded-2xl shadow-xl p-2 text-xs space-y-1 z-50 animate-in fade-in zoom-in-95 duration-150">
                 <div className="px-3 py-2 border-b border-slate-100">
-                  <p className="font-bold text-slate-900 truncate">
-                    {user?.displayName || (user ? "Participant" : "Guest User")}
-                  </p>
-                  <p className="text-[10px] text-slate-400 truncate">
-                    {user?.email || "Not signed in"}
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <p className="font-bold text-slate-900 truncate">
+                      {displayUser.displayName}
+                    </p>
+                    {displayUser.roleBadge && (
+                      <span className="text-[9px] font-bold uppercase tracking-wider bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">
+                        {displayUser.roleBadge}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-slate-500 truncate font-mono">
+                    {displayUser.email}
                   </p>
                 </div>
 
-                <Link
-                  href="/team"
-                  onClick={() => setIsProfileOpen(false)}
-                  className="block px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-50 font-medium"
-                >
-                  My Team Workspace
-                </Link>
-
-                {/* RBAC: Only visible to authenticated administrators */}
-                {isAdmin && (
-                  <Link
-                    href="/admin/submissions"
-                    onClick={() => setIsProfileOpen(false)}
-                    className="block px-3 py-2 rounded-xl text-blue-700 hover:bg-blue-50 font-semibold"
-                  >
-                    Admin Dashboard
-                  </Link>
+                {isViewingAdmin ? (
+                  <>
+                    <Link
+                      href="/admin/submissions"
+                      onClick={() => setIsProfileOpen(false)}
+                      className="block px-3 py-2 rounded-xl text-blue-700 bg-blue-50/60 font-semibold"
+                    >
+                      Admin Dashboard
+                    </Link>
+                    <Link
+                      href="/leaderboard"
+                      onClick={() => setIsProfileOpen(false)}
+                      className="block px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-50 font-medium"
+                    >
+                      Live Leaderboard
+                    </Link>
+                    <Link
+                      href="/"
+                      onClick={() => setIsProfileOpen(false)}
+                      className="block px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-50 font-medium"
+                    >
+                      Events Console
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <Link
+                      href="/team"
+                      onClick={() => setIsProfileOpen(false)}
+                      className="block px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-50 font-medium"
+                    >
+                      My Team Workspace
+                    </Link>
+                    <Link
+                      href="/submit"
+                      onClick={() => setIsProfileOpen(false)}
+                      className="block px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-50 font-medium"
+                    >
+                      Submit Project
+                    </Link>
+                    {isAdmin && (
+                      <Link
+                        href="/admin/submissions"
+                        onClick={() => setIsProfileOpen(false)}
+                        className="block px-3 py-2 rounded-xl text-blue-700 hover:bg-blue-50 font-semibold"
+                      >
+                        Admin Dashboard
+                      </Link>
+                    )}
+                  </>
                 )}
 
                 <div className="border-t border-slate-100 my-1"></div>
@@ -262,7 +322,12 @@ export default function Navigation() {
                   type="button"
                   onClick={() => {
                     setIsProfileOpen(false);
-                    logout();
+                    if (isViewingAdmin) {
+                      clearAdminSession();
+                      window.location.href = '/admin/login';
+                    } else {
+                      logout();
+                    }
                   }}
                   className="w-full text-left px-3 py-2 rounded-xl text-red-600 hover:bg-red-50 font-medium flex items-center gap-2 cursor-pointer"
                 >
