@@ -13,6 +13,7 @@ import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import Link from 'next/link';
 import SubmissionLockedReceipt, { SubmissionReceiptData } from '@/components/SubmissionLockedReceipt';
+import { saveFileChunksToFirestore } from '@/lib/submission-files';
 
 // Strict ASCII & No Emoji Regex
 const noEmojiAscii = /^[\x00-\x7F]*$/;
@@ -168,8 +169,9 @@ export default function ProjectSubmissionPage() {
       }
 
       // Persist to Firestore
+      let createdDocId = '';
       if (db) {
-        await addDoc(collection(db, "submissions"), {
+        const docRef = await addDoc(collection(db, "submissions"), {
           submissionId: uniqueSubId,
           title: data.title,
           description: data.description,
@@ -190,6 +192,10 @@ export default function ProjectSubmissionPage() {
           sha256Hash: sha256,
           status: 'Valid',
         });
+        createdDocId = docRef.id;
+
+        // Persist original binary file chunks to Firestore to guarantee zero loss
+        await saveFileChunksToFirestore(db, docRef.id, file);
       }
 
       // Update local state to immediately show locked receipt

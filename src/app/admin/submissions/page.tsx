@@ -10,6 +10,7 @@ import {
 import { collection, onSnapshot, query, orderBy, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import AdminRouteGuard from '@/components/AdminRouteGuard';
+import { downloadFileFromFirestore } from '@/lib/submission-files';
 
 interface AdminSubmission {
   id: string;
@@ -22,6 +23,7 @@ interface AdminSubmission {
   submittedOn: string;
   status: 'Valid' | 'Under review' | 'Disqualified';
   assetUrl?: string;
+  fileName?: string;
 }
 
 export default function AdminSubmissionsPage() {
@@ -66,6 +68,7 @@ export default function AdminSubmissionsPage() {
             submittedOn: d.submittedAtFormatted || '18 Oct 2026, 11:59 PM',
             status: (d.status === 'Approved' ? 'Valid' : d.status === 'Disqualified' ? 'Disqualified' : 'Under review') as any,
             assetUrl: d.assetUrl,
+            fileName: d.fileName || 'Project_Presentation.pdf',
           };
         });
 
@@ -151,6 +154,27 @@ export default function AdminSubmissionsPage() {
     a.download = `HackGrid_Submissions_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadSubmissionFile = async (sub: AdminSubmission) => {
+    if (db) {
+      const ok = await downloadFileFromFirestore(db, sub.id, sub.fileName || `${sub.projectTitle}.pdf`);
+      if (ok) return;
+    }
+
+    if (sub.assetUrl && sub.assetUrl.trim() !== '') {
+      const a = document.createElement('a');
+      a.href = sub.assetUrl;
+      a.download = sub.fileName || `${sub.projectTitle}.pdf`;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return;
+    }
+
+    alert(`No attachment file was saved for "${sub.projectTitle}". The storage service was offline at the time of submission.`);
   };
 
   return (
@@ -374,7 +398,7 @@ export default function AdminSubmissionsPage() {
 
                       {/* Download PDF Presentation */}
                       <button
-                        onClick={handleExportCsv}
+                        onClick={() => handleDownloadSubmissionFile(sub)}
                         className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition cursor-pointer"
                         title="Download submission file"
                       >

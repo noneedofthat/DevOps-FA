@@ -475,18 +475,24 @@ app.post('/api/upload', (req: Request, res: Response, next: NextFunction) => {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost:5000';
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
     const proto = req.headers['x-forwarded-proto'] || 'http';
-    const baseUrl = process.env.BASE_URL || `${proto}://${host}`;
-    const fileUrl = `${baseUrl}/uploads/${uploadedFile.filename}`;
+    const relativeUrl = `/uploads/${uploadedFile.filename}`;
+    const fileUrl = process.env.BASE_URL 
+      ? `${process.env.BASE_URL}${relativeUrl}` 
+      : host 
+        ? `${proto}://${host}${relativeUrl}` 
+        : relativeUrl;
+
     const fileInfo = {
       originalName: uploadedFile.originalname,
       mimetype: uploadedFile.mimetype,
       size: uploadedFile.size,
-      url: fileUrl
+      url: fileUrl,
+      relativeUrl
     };
 
-    res.json({ message: 'File uploaded successfully', file: fileInfo, fileUrl, url: fileUrl });
+    res.json({ message: 'File uploaded successfully', file: fileInfo, fileUrl, url: relativeUrl, relativeUrl });
   });
 });
 

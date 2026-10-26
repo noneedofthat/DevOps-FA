@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { downloadFileFromFirestore } from '@/lib/submission-files';
 
 interface CriteriaScore {
   innovation: number;
@@ -89,94 +90,47 @@ export default function JudgeEvaluatePage() {
     }).catch(err => console.warn(err));
   }, [submissionId]);
 
-  const handleDownloadDeliverable = (e: React.MouseEvent) => {
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleDownloadDeliverable = async (e: React.MouseEvent) => {
     e.preventDefault();
-    if (projectData.presentationUrl && projectData.presentationUrl.trim() !== '') {
-      const a = document.createElement('a');
-      a.href = projectData.presentationUrl;
-      a.download = projectData.presentationFileName;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      return;
+    setDownloadError(null);
+    setIsDownloading(true);
+
+    try {
+      // 1. First attempt to download genuine original binary from Firestore chunks
+      if (db && submissionId) {
+        const success = await downloadFileFromFirestore(db, submissionId, projectData.presentationFileName);
+        if (success) {
+          setIsDownloading(false);
+          return;
+        }
+      }
+
+      // 2. If no chunks found, check if valid direct presentationUrl is available
+      if (projectData.presentationUrl && projectData.presentationUrl.trim() !== '') {
+        const a = document.createElement('a');
+        a.href = projectData.presentationUrl;
+        a.download = projectData.presentationFileName;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setIsDownloading(false);
+        return;
+      }
+
+      // 3. Transparent notice: inform the evaluator that no binary was attached to this specific record
+      setDownloadError(
+        `Original attachment "${projectData.presentationFileName}" was not stored during submission because file storage was offline. Please evaluate using the GitHub repository or live URL.`
+      );
+    } catch (err: any) {
+      setDownloadError(`Failed to download deliverable: ${err?.message || 'Network error'}`);
+    } finally {
+      setIsDownloading(false);
     }
-
-    // Dynamic generation of an authentic, valid PDF (application/pdf)
-    const lines = [
-      { text: 'HACKGRID - CAMPUS INNOVATION SPRINT 2026', size: 14, dy: 22 },
-      { text: 'Pimpri Chinchwad College of Engineering (PCCOE) - Dept. of Computer Engineering', size: 10, dy: 16 },
-      { text: '------------------------------------------------------------------------------------------------------------------------', size: 10, dy: 24 },
-      { text: `PROJECT DELIVERABLE RECORD: ${projectData.title.toUpperCase()}`, size: 12, dy: 20 },
-      { text: `Team Name:              ${projectData.teamName}`, size: 10, dy: 16 },
-      { text: `Deliverable File:       ${projectData.presentationFileName} (${projectData.presentationFileSize})`, size: 10, dy: 16 },
-      { text: `Evaluation Status:      ${projectData.status}`, size: 10, dy: 16 },
-      { text: `Submission Date:        ${projectData.submittedAt}`, size: 10, dy: 16 },
-      { text: `Competition Track:      ${projectData.track}`, size: 10, dy: 16 },
-      { text: `GitHub Repository:      ${projectData.githubUrl || 'None'}`, size: 10, dy: 16 },
-      { text: `Live Application URL:   ${projectData.liveDemoUrl || 'None'}`, size: 10, dy: 22 },
-      { text: '------------------------------------------------------------------------------------------------------------------------', size: 10, dy: 20 },
-      { text: 'PROJECT SUMMARY & SOLUTION ARCHITECTURE:', size: 11, dy: 18 },
-      { text: (projectData.description || 'Project deliverable submission registered on HackGrid evaluation portal.').substring(0, 160), size: 10, dy: 24 },
-      { text: 'CRYPTOGRAPHIC SHA-256 VERIFICATION DIGEST:', size: 11, dy: 18 },
-      { text: projectData.sha256Hash || '4259297a87b80e2b8514a049e8273263a7e91c758e04a5cf38ea407ef9979658', size: 9, dy: 30 },
-      { text: '------------------------------------------------------------------------------------------------------------------------', size: 10, dy: 20 },
-      { text: 'OFFICIAL RECORD - BCE27PE01 DEVOPS PRACTICAL EVALUATION COUNCIL', size: 9, dy: 14 },
-      { text: 'Verified and archived by HackGrid Platform Security Engine', size: 8, dy: 14 }
-    ];
-
-    let streamContent = 'BT /F1 10 Tf 50 740 Td 18 TL\n';
-    lines.forEach((item) => {
-      const escaped = item.text.split('\\').join('\\\\').split('(').join('\\(').split(')').join('\\)');
-      const size = item.size || 10;
-      const dy = item.dy || 18;
-      streamContent += `/F1 ${size} Tf\n`;
-      streamContent += `(${escaped}) Tj\n`;
-      streamContent += `0 -${dy} Td\n`;
-    });
-    streamContent += 'ET';
-
-    const encoder = new TextEncoder();
-    const len = encoder.encode(streamContent).length;
-
-    let pdf = '%PDF-1.4\n';
-    const offsets: number[] = [];
-
-    offsets.push(encoder.encode(pdf).length);
-    pdf += '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n';
-
-    offsets.push(encoder.encode(pdf).length);
-    pdf += '2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n';
-
-    offsets.push(encoder.encode(pdf).length);
-    pdf += '3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n';
-
-    offsets.push(encoder.encode(pdf).length);
-    pdf += `4 0 obj\n<< /Length ${len} >>\nstream\n${streamContent}\nendstream\nendobj\n`;
-
-    offsets.push(encoder.encode(pdf).length);
-    pdf += '5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n';
-
-    const startXref = encoder.encode(pdf).length;
-    pdf += 'xref\n0 6\n0000000000 65535 f \n';
-    offsets.forEach((off) => {
-      pdf += `${String(off).padStart(10, '0')} 00000 n \n`;
-    });
-    pdf += `trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${startXref}\n%%EOF`;
-
-    const blob = new Blob([pdf], { type: 'application/pdf' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    const downloadName = projectData.presentationFileName.toLowerCase().endsWith('.pdf')
-      ? projectData.presentationFileName
-      : `${projectData.presentationFileName}.pdf`;
-    a.download = downloadName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
   };
 
   const handleScoreChange = (field: keyof CriteriaScore, val: string, max: number) => {
@@ -611,12 +565,20 @@ export default function JudgeEvaluatePage() {
 
               <button
                 onClick={handleDownloadDeliverable}
-                className="text-slate-600 hover:text-slate-900 p-1.5 rounded hover:bg-slate-200 transition cursor-pointer"
+                disabled={isDownloading}
+                className="text-slate-600 hover:text-slate-900 p-1.5 rounded hover:bg-slate-200 transition cursor-pointer disabled:opacity-50"
                 title="Download presentation deliverable"
               >
-                <Download size={15} />
+                <Download size={15} className={isDownloading ? 'animate-bounce' : ''} />
               </button>
             </div>
+
+            {downloadError && (
+              <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-800 flex items-start gap-2 leading-relaxed">
+                <AlertCircle size={14} className="text-amber-600 shrink-0 mt-0.5" />
+                <span>{downloadError}</span>
+              </div>
+            )}
           </div>
 
           {/* Submission Timeline */}

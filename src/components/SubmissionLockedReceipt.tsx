@@ -6,6 +6,8 @@ import {
   CheckCircle2, Lock, FileText, AlignLeft, Link2, ExternalLink, 
   Download, Copy, Check, Printer, Clock, ShieldCheck, Trophy, ArrowRight
 } from 'lucide-react';
+import { db } from '@/lib/firebase';
+import { downloadFileFromFirestore } from '@/lib/submission-files';
 
 export interface SubmissionReceiptData {
   submissionId: string;
@@ -256,24 +258,30 @@ export default function SubmissionLockedReceipt({
                       </div>
                     </div>
 
-                    {submission.presentationUrl ? (
-                      <a
-                        href={submission.presentationUrl}
-                        download={submission.presentationFileName}
-                        className="text-slate-600 hover:text-slate-900 p-2 rounded-lg hover:bg-slate-200 transition"
-                        title="Download uploaded file"
-                      >
-                        <Download size={16} />
-                      </a>
-                    ) : (
-                      <button
-                        onClick={handlePrintReceipt}
-                        className="text-slate-600 hover:text-slate-900 p-2 rounded-lg hover:bg-slate-200 transition"
-                        title="Download submission receipt"
-                      >
-                        <Download size={16} />
-                      </button>
-                    )}
+                    <button
+                      onClick={async () => {
+                        if (submission.presentationUrl && submission.presentationUrl.trim() !== '') {
+                          const a = document.createElement('a');
+                          a.href = submission.presentationUrl;
+                          a.download = submission.presentationFileName;
+                          a.target = '_blank';
+                          a.rel = 'noopener noreferrer';
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                          return;
+                        }
+                        if (db) {
+                          const ok = await downloadFileFromFirestore(db, submission.submissionId, submission.presentationFileName);
+                          if (ok) return;
+                        }
+                        handlePrintReceipt();
+                      }}
+                      className="text-slate-600 hover:text-slate-900 p-2 rounded-lg hover:bg-slate-200 transition cursor-pointer"
+                      title="Download presentation deliverable"
+                    >
+                      <Download size={16} />
+                    </button>
                   </div>
                 </div>
               </div>
