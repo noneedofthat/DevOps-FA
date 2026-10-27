@@ -8,7 +8,7 @@ import {
   FileText, Link2, ExternalLink, UploadCloud, CheckCircle2, 
   Circle, AlertCircle, ArrowRight, Save, Send, Sparkles, Check
 } from 'lucide-react';
-import { collection, addDoc, serverTimestamp, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, where, onSnapshot, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import Link from 'next/link';
@@ -75,37 +75,61 @@ export default function ProjectSubmissionPage() {
   const watchedDesc = watch('description');
   const watchedGithub = watch('githubUrl');
 
-  // Check if active user already submitted
+  // Check if active user or user's team already submitted
   useEffect(() => {
     if (!db || !user) {
       setLoadingSubmission(false);
       return;
     }
 
-    const qSub = query(collection(db, "submissions"), where("submittedByUid", "==", user.uid));
-    const unsubscribe = onSnapshot(qSub, (snapshot) => {
-      if (!snapshot.empty) {
-        const d = snapshot.docs[0].data();
-        setExistingSubmission({
-          submissionId: d.submissionId || `SUB-2026-${snapshot.docs[0].id.substring(0, 8).toUpperCase()}`,
-          projectTitle: d.title,
-          projectDescription: d.description,
-          githubUrl: d.githubUrl || d.repoUrl,
-          liveDemoUrl: d.liveDemoUrl || d.liveAppUrl,
-          presentationFileName: d.fileName || 'Project_Presentation.pdf',
-          presentationFileSize: d.fileSize || '2.4 MB',
-          presentationUrl: d.assetUrl,
-          eventTitle: d.eventTitle || 'Campus Innovation Sprint 2026',
-          submittedAtIso: d.submittedAtIso || new Date().toISOString(),
-          submittedAtFormatted: d.submittedAtFormatted || '18 Oct 2026, 11:59 PM IST',
-          sha256Hash: d.sha256Hash || 'd2c9a7f4e8b6c3d1a9f2e6b4c8d1e0f7a3c5d9e68b2f4a1d9c6e3f7b5a8d0c2e4f6a9b1c3d5e7f8',
-          status: 'Submitted',
-        });
+    let unsubSub: (() => void) | null = null;
+
+    // Check user's team first to ensure full team-wide sync
+    const qTeam = query(collection(db, "teams"), where("members", "array-contains", user.uid));
+    const unsubTeam = onSnapshot(qTeam, (teamSnap) => {
+      let membersList: string[] = [user.uid];
+      if (!teamSnap.empty) {
+        const teamDocData = teamSnap.docs[0].data();
+        if (Array.isArray(teamDocData.members) && teamDocData.members.length > 0) {
+          membersList = teamDocData.members;
+        }
       }
-      setLoadingSubmission(false);
+
+      if (unsubSub) unsubSub();
+
+      const qSub = membersList.length <= 10
+        ? query(collection(db, "submissions"), where("submittedByUid", "in", membersList))
+        : query(collection(db, "submissions"), where("submittedByUid", "==", user.uid));
+
+      unsubSub = onSnapshot(qSub, (snapshot) => {
+        if (!snapshot.empty) {
+          const d = snapshot.docs[0].data();
+          setExistingSubmission({
+            submissionId: d.submissionId || `SUB-2026-${snapshot.docs[0].id.substring(0, 8).toUpperCase()}`,
+            projectTitle: d.title,
+            projectDescription: d.description,
+            githubUrl: d.githubUrl || d.repoUrl,
+            liveDemoUrl: d.liveDemoUrl || d.liveAppUrl,
+            presentationFileName: d.fileName || 'Project_Presentation.pdf',
+            presentationFileSize: d.fileSize || '2.4 MB',
+            presentationUrl: d.assetUrl,
+            eventTitle: d.eventTitle || 'Campus Innovation Sprint 2026',
+            submittedAtIso: d.submittedAtIso || new Date().toISOString(),
+            submittedAtFormatted: d.submittedAtFormatted || '18 Oct 2026, 11:59 PM IST',
+            sha256Hash: d.sha256Hash || 'd2c9a7f4e8b6c3d1a9f2e6b4c8d1e0f7a3c5d9e68b2f4a1d9c6e3f7b5a8d0c2e4f6a9b1c3d5e7f8',
+            status: 'Submitted',
+          });
+        } else {
+          setExistingSubmission(null);
+        }
+        setLoadingSubmission(false);
+      });
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubTeam();
+      if (unsubSub) unsubSub();
+    };
   }, [user]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -171,6 +195,22 @@ export default function ProjectSubmissionPage() {
       // Persist to Firestore
       let createdDocId = '';
       if (db) {
+        // Query user's team if any for cross-page synchronization
+        let userTeamId = '';
+        let userTeamName = '';
+        let userTeamMembers = [user.uid];
+        try {
+          const qTeam = query(collection(db, "teams"), where("members", "array-contains", user.uid));
+          const teamSnap = await getDocs(qTeam);
+          if (!teamSnap.empty) {
+            userTeamId = teamSnap.docs[0].id;
+            userTeamName = teamSnap.docs[0].data().name || '';
+            userTeamMembers = teamSnap.docs[0].data().members || [user.uid];
+          }
+        } catch (e) {
+          console.warn('Failed to query team for submission', e);
+        }
+
         const docRef = await addDoc(collection(db, "submissions"), {
           submissionId: uniqueSubId,
           title: data.title,
@@ -184,6 +224,9 @@ export default function ProjectSubmissionPage() {
           assetUrl,
           submittedByUid: user.uid,
           submittedByName: user.displayName || user.email || 'Participant',
+          teamId: userTeamId,
+          teamName: userTeamName,
+          teamMembers: userTeamMembers,
           eventTitle: 'Campus Innovation Sprint 2026',
           timestamp: serverTimestamp(),
           submittedAtIso: dateObj.toISOString(),
@@ -193,6 +236,25 @@ export default function ProjectSubmissionPage() {
           status: 'Valid',
         });
         createdDocId = docRef.id;
+
+        // Synchronize team document immediately to 100% completion
+        if (userTeamId) {
+          try {
+            await updateDoc(doc(db, "teams", userTeamId), {
+              isSubmitted: true,
+              submissionId: uniqueSubId,
+              submissionDocId: createdDocId,
+              progressPercentage: 100,
+              githubUrl: data.githubUrl,
+              projectTitle: data.title,
+              submittedAtFormatted: formattedDate,
+              submittedByUid: user.uid,
+              submittedByName: user.displayName || user.email || 'Participant',
+            });
+          } catch (e) {
+            console.warn('Failed to update team document', e);
+          }
+        }
 
         // Persist original binary file chunks to Firestore to guarantee zero loss
         await saveFileChunksToFirestore(db, docRef.id, file);

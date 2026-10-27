@@ -45,31 +45,54 @@ export default function TeamFormationPage() {
       return;
     }
 
+    let unsubSub: (() => void) | null = null;
+
     const qTeam = query(collection(db, "teams"), where("members", "array-contains", user.uid));
     const unsubTeam = onSnapshot(qTeam, (snapshot) => {
       if (!snapshot.empty) {
         setHasTeam(true);
-        const data: any = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
+        const teamDoc = snapshot.docs[0];
+        const data: any = { id: teamDoc.id, ...teamDoc.data() };
         setTeamData(data);
+
+        // Listen for submission belonging to any team member
+        if (unsubSub) unsubSub();
+
+        const membersList: string[] = Array.isArray(data.members) && data.members.length > 0 
+          ? data.members 
+          : [user.uid];
+
+        const qSub = membersList.length <= 10
+          ? query(collection(db, "submissions"), where("submittedByUid", "in", membersList))
+          : query(collection(db, "submissions"), where("submittedByUid", "==", user.uid));
+
+        unsubSub = onSnapshot(qSub, (subSnap) => {
+          if (!subSnap.empty) {
+            setSubmissionData({ id: subSnap.docs[0].id, ...subSnap.docs[0].data() });
+          } else {
+            setSubmissionData(null);
+          }
+        });
       } else {
         setHasTeam(false);
         setTeamData(null);
+
+        if (unsubSub) unsubSub();
+        const qSubUser = query(collection(db, "submissions"), where("submittedByUid", "==", user.uid));
+        unsubSub = onSnapshot(qSubUser, (subSnap) => {
+          if (!subSnap.empty) {
+            setSubmissionData({ id: subSnap.docs[0].id, ...subSnap.docs[0].data() });
+          } else {
+            setSubmissionData(null);
+          }
+        });
       }
       setLoading(false);
     });
 
-    const qSub = query(collection(db, "submissions"), where("submittedByUid", "==", user.uid));
-    const unsubSub = onSnapshot(qSub, (snapshot) => {
-      if (!snapshot.empty) {
-        setSubmissionData(snapshot.docs[0].data());
-      } else {
-        setSubmissionData(null);
-      }
-    });
-
     return () => {
       unsubTeam();
-      unsubSub();
+      if (unsubSub) unsubSub();
     };
   }, [user]);
 
@@ -342,8 +365,20 @@ export default function TeamFormationPage() {
 
   // Dynamically calculate milestones from real submission and team state
   const hasProblemStatement = Boolean(hasTeam);
-  const hasRepo = Boolean(submissionData?.githubUrl || submissionData?.repoUrl);
-  const isSubmitted = Boolean(submissionData?.status === 'Submitted' || submissionData?.assetUrl);
+  const hasRepo = Boolean(submissionData?.githubUrl || submissionData?.repoUrl || teamData?.githubUrl);
+  const isSubmitted = Boolean(
+    (submissionData && (
+      submissionData.submissionId || 
+      submissionData.title || 
+      submissionData.submittedAtFormatted ||
+      submissionData.submittedAtIso ||
+      submissionData.fileName ||
+      submissionData.assetUrl ||
+      ['submitted', 'approved', 'valid', 'under review', 'evaluated'].includes(String(submissionData.status || '').toLowerCase())
+    )) ||
+    teamData?.isSubmitted ||
+    teamData?.submissionId
+  );
 
   const completedCount = (hasProblemStatement ? 1 : 0) + (hasRepo ? 1 : 0) + (isSubmitted ? 1 : 0);
   const progress = Math.round((completedCount / 3) * 100);
@@ -516,7 +551,21 @@ export default function TeamFormationPage() {
                 <div>
                   <div className="font-bold text-slate-900">Add repository link and details</div>
                   <div className="text-[11px] text-slate-400 mt-0.5">
-                    {hasRepo ? (submissionData?.githubUrl || 'Repository linked') : 'Add your GitHub repo in Submit'}
+                    {hasRepo ? (
+                      <a 
+                        href={submissionData?.githubUrl || submissionData?.repoUrl || teamData?.githubUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline inline-flex items-center gap-1"
+                      >
+                        <span className="truncate max-w-[200px] sm:max-w-[260px]">
+                          {submissionData?.githubUrl || submissionData?.repoUrl || teamData?.githubUrl}
+                        </span>
+                        <ExternalLink size={10} className="flex-shrink-0" />
+                      </a>
+                    ) : (
+                      'Add your GitHub repo in Submit'
+                    )}
                   </div>
                 </div>
               </div>
@@ -537,7 +586,11 @@ export default function TeamFormationPage() {
                 )}
                 <div>
                   <div className="font-bold text-slate-900">Submit final project</div>
-                  <div className="text-[11px] text-slate-400 mt-0.5">18 Oct, 2026</div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    {isSubmitted 
+                      ? (submissionData?.submittedAtFormatted || teamData?.submittedAtFormatted || 'Completed on 23 Oct 2026') 
+                      : 'Due 18 Oct, 2026'}
+                  </div>
                 </div>
               </div>
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
@@ -553,7 +606,7 @@ export default function TeamFormationPage() {
               href="/submit"
               className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-xs transition flex items-center justify-center gap-2 shadow-sm"
             >
-              <span>Go to Project Submission</span>
+              <span>{isSubmitted ? 'View Submission Receipt' : 'Go to Project Submission'}</span>
               <ArrowRight size={14} />
             </Link>
           </div>
