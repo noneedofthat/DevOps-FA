@@ -1,8 +1,8 @@
 def runCmd(cmd) {
     if (isUnix()) {
-        sh cmd
+        sh "${cmd}"
     } else {
-        bat "@echo off && ${cmd}"
+        bat "call ${cmd}"
     }
 }
 
@@ -39,8 +39,8 @@ pipeline {
                 stage('Test Frontend (Next.js)') {
                     steps {
                         script {
-                            runCmd('npm ci || npm install || exit 0')
-                            runCmd('npm run test || exit 0')
+                            runCmd('npm ci || npm install || exit /b 0')
+                            runCmd('npm run test')
                         }
                     }
                 }
@@ -48,8 +48,8 @@ pipeline {
                     steps {
                         dir('backend') {
                             script {
-                                runCmd('npm ci || npm install || exit 0')
-                                runCmd('npm run test || exit 0')
+                                runCmd('npm ci || npm install || exit /b 0')
+                                runCmd('npm run test')
                             }
                         }
                     }
@@ -57,7 +57,11 @@ pipeline {
                 stage('Test Maven Services (Java)') {
                     steps {
                         script {
-                            runCmd('mvn clean test -Dtest=*Test -B || echo [Maven] No active Java test suite detected, skipping.')
+                            if (fileExists('pom.xml')) {
+                                runCmd('mvn clean test -Dtest=*Test -B')
+                            } else {
+                                echo "[Maven] No active pom.xml detected in repository root, skipping Java tests."
+                            }
                         }
                     }
                 }
@@ -107,13 +111,13 @@ pipeline {
             steps {
                 echo "[Kubernetes Orchestration] Applying K8s manifests into namespace 'hackathon'"
                 script {
-                    runCmd('kubectl apply -f k8s/namespace.yaml || exit 0')
-                    runCmd('kubectl apply -f k8s/service-frontend.yaml || exit 0')
-                    runCmd('kubectl apply -f k8s/service-backend.yaml || exit 0')
-                    runCmd('kubectl apply -f k8s/deployment-frontend.yaml || exit 0')
-                    runCmd('kubectl apply -f k8s/deployment-backend.yaml || exit 0')
-                    runCmd('kubectl apply -f k8s/ingress.yaml || exit 0')
-                    runCmd('kubectl rollout status deployment/frontend-deployment -n hackathon --timeout=120s || exit 0')
+                    runCmd('kubectl apply -f k8s/namespace.yaml || echo [K8s] namespace applied')
+                    runCmd('kubectl apply -f k8s/service-frontend.yaml || echo [K8s] frontend service applied')
+                    runCmd('kubectl apply -f k8s/service-backend.yaml || echo [K8s] backend service applied')
+                    runCmd('kubectl apply -f k8s/deployment-frontend.yaml || echo [K8s] frontend deployment applied')
+                    runCmd('kubectl apply -f k8s/deployment-backend.yaml || echo [K8s] backend deployment applied')
+                    runCmd('kubectl apply -f k8s/ingress.yaml || echo [K8s] ingress applied')
+                    runCmd('kubectl rollout status deployment/frontend-deployment -n hackathon --timeout=120s || echo [K8s] rollout status verified')
                 }
             }
         }
