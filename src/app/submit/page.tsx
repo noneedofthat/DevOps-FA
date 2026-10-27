@@ -134,18 +134,23 @@ export default function ProjectSubmissionPage() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFileError('');
-    if (e.target.files && e.target.files[0]) {
-      const selectedFile = e.target.files[0];
-      if (selectedFile.size > 10 * 1024 * 1024) {
-        setFileError('File size exceeds the 10 MB limit.');
-        return;
-      }
-      if (!selectedFile.name.toLowerCase().endsWith('.pdf')) {
-        setFileError('Invalid format. Please upload a PDF file.');
-        return;
-      }
-      setFile(selectedFile);
+    const selectedFile = e.target.files?.[0];
+    if (!selectedFile) return;
+    if (selectedFile.size === 0) {
+      setFileError('Uploaded file is empty.');
+      return;
     }
+    if (selectedFile.size > 10 * 1024 * 1024) {
+      setFileError('File size exceeds the 10 MB limit.');
+      return;
+    }
+    const isPdfMime = selectedFile.type === 'application/pdf';
+    const hasPdfExt = selectedFile.name.toLowerCase().endsWith('.pdf');
+    if (!isPdfMime && !hasPdfExt) {
+      setFileError('Invalid format. Only authenticated PDF documents are accepted.');
+      return;
+    }
+    setFile(selectedFile);
   };
 
   const onSubmit = async (data: SubmissionFormData) => {
