@@ -67,16 +67,25 @@ export async function downloadFileFromFirestore(
       chunks.push(snap.data() as any);
     });
 
-    chunks.sort((a, b) => a.index - b.index);
-    const fullDataUrl = chunks.map(c => c.data).join('');
+    const fullData = chunks.map(c => c.data).join('');
     const fileName = chunks[0]?.fileName || defaultFileName;
     const fileType = chunks[0]?.fileType || 'application/pdf';
 
-    const res = await fetch(fullDataUrl);
-    const blob = await res.blob();
-    const typedBlob = new Blob([blob], { type: fileType });
-    const url = URL.createObjectURL(typedBlob);
+    let typedBlob: Blob;
+    try {
+      const base64Data = fullData.includes(',') ? fullData.split(',')[1] : fullData;
+      const binaryString = atob(base64Data);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      typedBlob = new Blob([bytes], { type: fileType });
+    } catch {
+      const res = await fetch(fullData.startsWith('data:') ? fullData : `data:${fileType};base64,${fullData}`);
+      typedBlob = await res.blob();
+    }
 
+    const url = URL.createObjectURL(typedBlob);
     const a = document.createElement('a');
     a.href = url;
     a.download = fileName;
