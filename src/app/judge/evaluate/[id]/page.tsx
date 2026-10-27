@@ -6,11 +6,11 @@ import { useParams, useRouter } from 'next/navigation';
 import { 
   Lightbulb, Code2, Leaf, MonitorPlay, Save, RotateCcw, 
   Send, ExternalLink, Download, FileText, CheckCircle2, 
-  Circle, ChevronLeft, ChevronRight, AlertCircle, Sparkles
+  Circle, ChevronLeft, ChevronRight, AlertCircle, Sparkles, UploadCloud
 } from 'lucide-react';
 import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { downloadFileFromFirestore } from '@/lib/submission-files';
+import { downloadFileFromFirestore, saveFileChunksToFirestore } from '@/lib/submission-files';
 
 interface CriteriaScore {
   innovation: number;
@@ -200,6 +200,40 @@ export default function JudgeEvaluatePage() {
       downloadFallbackDossier();
     } catch {
       downloadFallbackDossier();
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const [uploadSuccessMsg, setUploadSuccessMsg] = useState<string | null>(null);
+
+  const handleManualUploadDeliverable = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !db || !submissionId) return;
+
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      alert('Please upload a valid PDF document.');
+      return;
+    }
+
+    setIsDownloading(true);
+    setUploadSuccessMsg(null);
+    try {
+      await saveFileChunksToFirestore(db, submissionId, file);
+      const sizeStr = `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
+      setProjectData(prev => ({
+        ...prev,
+        presentationFileName: file.name,
+        presentationFileSize: sizeStr,
+      }));
+      await updateDoc(doc(db, "submissions", submissionId), {
+        fileName: file.name,
+        fileSize: sizeStr,
+      });
+      setUploadSuccessMsg(`Successfully attached "${file.name}"!`);
+      setTimeout(() => setUploadSuccessMsg(null), 4000);
+    } catch (err: any) {
+      alert(`Upload failed: ${err?.message || 'Error saving file'}`);
     } finally {
       setIsDownloading(false);
     }
@@ -635,15 +669,39 @@ export default function JudgeEvaluatePage() {
                 </div>
               </div>
 
-              <button
-                onClick={handleDownloadDeliverable}
-                disabled={isDownloading}
-                className="text-slate-600 hover:text-slate-900 p-1.5 rounded hover:bg-slate-200 transition cursor-pointer disabled:opacity-50"
-                title="Download presentation deliverable"
-              >
-                <Download size={15} className={isDownloading ? 'animate-bounce' : ''} />
-              </button>
+              <div className="flex items-center gap-1">
+                <input
+                  type="file"
+                  id="replace-deliverable-input"
+                  accept=".pdf"
+                  className="hidden"
+                  onChange={handleManualUploadDeliverable}
+                />
+                <label
+                  htmlFor="replace-deliverable-input"
+                  className="text-slate-500 hover:text-blue-600 p-1.5 rounded hover:bg-slate-200 transition cursor-pointer"
+                  title="Upload / Replace deliverable document"
+                >
+                  <UploadCloud size={15} />
+                </label>
+
+                <button
+                  onClick={handleDownloadDeliverable}
+                  disabled={isDownloading}
+                  className="text-slate-600 hover:text-slate-900 p-1.5 rounded hover:bg-slate-200 transition cursor-pointer disabled:opacity-50"
+                  title="Download presentation deliverable"
+                >
+                  <Download size={15} className={isDownloading ? 'animate-bounce' : ''} />
+                </button>
+              </div>
             </div>
+
+            {uploadSuccessMsg && (
+              <div className="mt-2.5 p-2 bg-emerald-50 border border-emerald-200 rounded-lg text-[11px] text-emerald-800 flex items-center gap-1.5">
+                <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+                <span>{uploadSuccessMsg}</span>
+              </div>
+            )}
           </div>
 
           {/* Submission Timeline */}
