@@ -167,23 +167,4 @@ export async function verifyAdminTOTP(
   }
 }
 
-/**
- * Fetch TOTP setup & verification parameters for demonstration and evaluation
- */
-export async function fetchAdminTotpInfo(): Promise<{
-  algorithm: string;
-  timeStepSeconds: number;
-  digits: number;
-  secretBase32: string;
-  currentLiveCode: string;
-  validUser: string;
-} | null> {
-  const apiUrl = getApiBaseUrl();
-  try {
-    const res = await fetch(`${apiUrl}/api/admin/totp-info`, { cache: 'no-store' });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
-}
+

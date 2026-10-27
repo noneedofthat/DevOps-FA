@@ -4,10 +4,10 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
-  ShieldCheck, Lock, Mail, Eye, EyeOff, KeyRound, 
+  ShieldCheck, Lock, Mail, Eye, EyeOff, 
   ArrowRight, AlertCircle, RefreshCw, Trophy, ArrowLeft
 } from 'lucide-react';
-import { verifyAdminTOTP, fetchAdminTotpInfo } from '@/lib/api';
+import { verifyAdminTOTP } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 
 export default function AdminTotpLoginPage() {
@@ -23,16 +23,8 @@ export default function AdminTotpLoginPage() {
   const [errorMessage, setErrorMessage] = useState('');
   const [isRateLimited, setIsRateLimited] = useState(false);
   const [retryAfterSeconds, setRetryAfterSeconds] = useState(0);
-  const [totpInfo, setTotpInfo] = useState<{ secretBase32: string; currentLiveCode: string } | null>(null);
-  const [showSecretGuide, setShowSecretGuide] = useState(false);
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
-
-  useEffect(() => {
-    fetchAdminTotpInfo().then((data) => {
-      if (data) setTotpInfo(data);
-    });
-  }, []);
 
   // Handle individual 6-digit TOTP input & auto-advance
   const handleDigitChange = (index: number, value: string) => {
@@ -63,14 +55,6 @@ export default function AdminTotpLoginPage() {
     if (pasted.length === 6) {
       const newDigits = pasted.split('');
       setTotpDigits(newDigits);
-      inputRefs.current[5]?.focus();
-    }
-  };
-
-  const handleQuickFillCode = () => {
-    if (totpInfo?.currentLiveCode) {
-      const digits = totpInfo.currentLiveCode.split('');
-      setTotpDigits(digits);
       inputRefs.current[5]?.focus();
     }
   };
@@ -297,39 +281,10 @@ export default function AdminTotpLoginPage() {
                 <label className="block text-xs font-semibold text-slate-700">
                   Authenticator Code (6-digit TOTP)
                 </label>
-                <button
-                  type="button"
-                  onClick={() => setShowSecretGuide(!showSecretGuide)}
-                  className="text-[11px] text-blue-600 hover:text-blue-700 font-medium transition cursor-pointer flex items-center gap-1"
-                >
-                  <KeyRound size={12} />
-                  <span>{showSecretGuide ? 'Hide Secret' : 'Show Authenticator Key'}</span>
-                </button>
+                <span className="text-[10px] text-slate-400 font-mono">
+                  Google Authenticator
+                </span>
               </div>
-
-              {/* Secret helper card */}
-              {showSecretGuide && (
-                <div className="p-3 mb-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-600">Base32 Secret:</span>
-                    <span className="font-mono font-bold text-blue-700 bg-white px-2 py-0.5 rounded border border-slate-200">
-                      {totpInfo?.secretBase32 || 'JBSWY3DPEHPK3PXP'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between pt-1 border-t border-slate-200 text-[10px]">
-                    <span className="text-slate-500">Google Authenticator compatible</span>
-                    {totpInfo?.currentLiveCode && (
-                      <button
-                        type="button"
-                        onClick={handleQuickFillCode}
-                        className="font-bold text-emerald-700 hover:underline cursor-pointer"
-                      >
-                        Autofill {totpInfo.currentLiveCode}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
 
               {/* 6 Digit Grid */}
               <div className="grid grid-cols-6 gap-2" onPaste={handlePaste}>

@@ -407,16 +407,9 @@ const handleAdminAuthentication = async (req: Request, res: Response) => {
 app.post('/api/admin/login', handleAdminAuthentication);
 app.post('/api/admin/verify', handleAdminAuthentication);
 
-// Inspector endpoint for authenticator setup & evaluation testing
+// Authenticator inspection endpoint disabled in production
 app.get('/api/admin/totp-info', (req: Request, res: Response) => {
-  res.json({
-    algorithm: 'RFC 6238 TOTP (HMAC-SHA1)',
-    timeStepSeconds: 30,
-    digits: 6,
-    secretBase32: ADMIN_STORE.totpSecret,
-    currentLiveCode: generateCurrentTOTP(ADMIN_STORE.totpSecret),
-    validUser: ADMIN_STORE.email,
-  });
+  res.status(403).json({ error: 'Endpoint disabled. Administrative secrets are stored securely in environment.' });
 });
 
 // Server-Side Administrative Role Enforcement Middleware
